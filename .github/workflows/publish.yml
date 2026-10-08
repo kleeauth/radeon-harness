@@ -1,0 +1,38 @@
+name: Publish existing build
+
+# Publishes the installers from an already finished Release run, without rebuilding.
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: ID of the Release run whose builds should be published
+        required: true
+      tag:
+        description: Release tag
+        required: true
+        default: v0.1.0
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: release
+          merge-multiple: true
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ls -la release
+          gh release create "${{ inputs.tag }}" release/* \
+            --repo "${GITHUB_REPOSITORY}" \
+            --target "${GITHUB_SHA}" \
+            --title "Radeon Harness ${{ inputs.tag }}" \
+            --generate-notes
