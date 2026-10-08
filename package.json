@@ -3,35 +3,90 @@
   "productName": "Radeon Harness",
   "description": "A Codex-style desktop app for opencode, with interactive widgets and mods",
   "license": "MIT",
+  "author": {
+    "name": "cloverscripts",
+    "email": "272895609+cloverscripts@users.noreply.github.com"
+  },
+  "homepage": "https://github.com/cloverscripts/radeon-harness",
   "repository": {
     "type": "git",
     "url": "https://github.com/cloverscripts/radeon-harness.git"
   },
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "app": "npm run build && electron .",
+    "dist": "npm run build && electron-builder --publish never",
+    "dist:win": "npm run build && electron-builder --win --publish never",
+    "dist:linux": "npm run build && electron-builder --linux --publish never",
     "lint": "oxlint",
     "preview": "vite preview"
   },
-  "dependencies": {
-    "@opencode-ai/sdk": "^1.18.35",
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8",
-    "react-markdown": "^10.1.0",
-    "remark-gfm": "^4.0.1"
+  "build": {
+    "appId": "io.github.cloverscripts.radeonharness",
+    "productName": "Radeon Harness",
+    "artifactName": "Radeon-Harness-${version}-${os}-${arch}.${ext}",
+    "publish": [
+      { "provider": "github", "owner": "cloverscripts", "repo": "radeon-harness", "releaseType": "release" }
+    ],
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**",
+      "electron/**",
+      "mods/**",
+      "package.json"
+    ],
+    "win": {
+      "icon": "build/icon.png",
+      "target": [
+        { "target": "nsis", "arch": ["x64", "arm64", "ia32"] },
+        { "target": "portable", "arch": ["x64"] }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "artifactName": "Radeon-Harness-${version}-setup-${arch}.${ext}"
+    },
+    "portable": {
+      "artifactName": "Radeon-Harness-${version}-portable-${arch}.${ext}"
+    },
+    "linux": {
+      "icon": "build/icon.png",
+      "category": "Development",
+      "synopsis": "Codex-style desktop app for opencode",
+      "maintainer": "cloverscripts <272895609+cloverscripts@users.noreply.github.com>",
+      "target": [
+        { "target": "AppImage", "arch": ["x64", "arm64"] },
+        { "target": "deb", "arch": ["x64", "arm64"] },
+        { "target": "rpm", "arch": ["x64", "arm64"] },
+        { "target": "tar.gz", "arch": ["x64", "arm64"] }
+      ]
+    }
   },
   "devDependencies": {
+    "@opencode-ai/sdk": "^1.18.35",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^6.1.1",
     "electron": "^44.7.0",
+    "electron-builder": "^26.15.3",
     "oxlint": "^1.81.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
     "typescript": "~6.0.2",
     "vite": "^8.3.0"
   }

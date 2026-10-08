@@ -1,7 +1,12 @@
 import { useMemo, useState } from 'react'
 import type { Session } from '@opencode-ai/sdk'
 import { displayTitle } from '../lib/opencode'
-import { LogoMark, PlusIcon, PuzzleIcon, SearchIcon, SidebarIcon } from './Icons'
+import { FolderIcon, LogoMark, PlusIcon, PuzzleIcon, SearchIcon, SidebarIcon } from './Icons'
+
+// last path segment, for both C:\Users\me\project and /home/me/project
+function folderName(p: string) {
+  return p.split(/[\\/]/).filter(Boolean).pop() || p
+}
 
 type Props = {
   sessions: Session[]
@@ -73,6 +78,18 @@ export function Sidebar({ sessions, activeID, busy, connected, modCount, onSelec
           <span>New thread</span>
           <kbd>Ctrl N</kbd>
         </button>
+        {window.opencodeApp?.workspace && (
+          <button
+            type="button"
+            className="workspace-btn"
+            onClick={() => window.opencodeApp?.chooseWorkspace()}
+            title={`Workspace: ${window.opencodeApp.workspace}\nClick to switch folders (restarts the app)`}
+          >
+            <FolderIcon size={14} />
+            <span className="workspace-name">{folderName(window.opencodeApp.workspace)}</span>
+            <span className="workspace-switch">Switch</span>
+          </button>
+        )}
         <label className="sidebar-search">
           <SearchIcon size={14} />
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search threads" />

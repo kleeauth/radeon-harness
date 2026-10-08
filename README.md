@@ -13,12 +13,35 @@ Radeon Harness launches opencode itself, so there is no terminal step. Every mod
 - **Slash commands.** Type `/` for app commands, mod commands, and your opencode commands.
 - **Permissions.** Tool permission requests from opencode appear inline with Allow once, Always allow, and Deny.
 
+## Download
+
+Grab the latest build from [Releases](https://github.com/cloverscripts/radeon-harness/releases).
+
+| Platform | File | Notes |
+| --- | --- | --- |
+| Windows 10 / 11 (x64, ARM64, 32-bit) | `Radeon-Harness-…-setup-<arch>.exe` | Installer. Per-user, no admin rights needed. |
+| Windows, no install | `Radeon-Harness-…-portable-x64.exe` | Runs from anywhere, e.g. a USB stick. |
+| Linux, any distro (x64, ARM64) | `Radeon-Harness-…-linux-<arch>.AppImage` | `chmod +x` it and run. |
+| Debian, Ubuntu, Mint, Pop!_OS | `.deb` | `sudo apt install ./Radeon-Harness-….deb` |
+| Fedora, RHEL, openSUSE | `.rpm` | `sudo dnf install ./Radeon-Harness-….rpm` |
+| Arch and anything else | `.tar.gz` | Extract and run `radeon-harness`. |
+
+The builds aren't code-signed yet, so Windows SmartScreen may warn on first launch: choose **More info → Run anyway**.
+
+On Ubuntu 24.04 and newer, AppImages can fail to start because of a sandbox restriction. Use the `.deb` there, or start the AppImage with `--no-sandbox`. Older AppImage setups also need FUSE (`sudo apt install libfuse2`).
+
+Windows 7 and 8.1 aren't supported: the Electron runtime this app is built on requires Windows 10 or newer.
+
 ## Requirements
 
-- [opencode](https://opencode.ai) installed and on your `PATH` (`opencode --version` should work), with at least one provider configured (`opencode auth login`)
-- Node.js 20 or newer
+- [opencode](https://opencode.ai) installed, with at least one provider configured (`opencode auth login`). The app finds it on your `PATH` and in the usual install locations. If yours is somewhere else, set `OPENCODE_BIN` to its full path.
+- To build from source: Node.js 20 or newer
 
-## Run it
+## Workspace
+
+opencode works inside one folder, shown at the top of the sidebar. It starts as your home folder; click it to switch to a project folder. The app restarts into the new folder, and your threads are listed per folder.
+
+## Run from source
 
 ```bash
 git clone https://github.com/cloverscripts/radeon-harness.git
@@ -51,7 +74,7 @@ API requests need a per-launch token that only the app's own window receives, so
 
 With Intelligent UI on, the model is told it may answer with a fenced `widget` block containing a self-contained HTML fragment. Widgets run in a sandboxed iframe on a separate origin with a Content Security Policy that blocks all direct network access. They can't reach the app, its storage, or your opencode server.
 
-For live data, widgets call:
+Remote images work with a plain `<img src="https://…">`: the app loads them through the same broker. For live data, widgets call:
 
 ```js
 const res = await harness.fetch('https://api.open-meteo.com/v1/forecast?latitude=52.52&longitude=13.41&current=temperature_2m')
@@ -103,7 +126,11 @@ Mods run with the same access as the app's interface, so only install mods you t
 npm run dev      # interface only, in a browser, proxied to an opencode server you start yourself
 npm run build    # typecheck and build the interface
 npm run app      # build and run the desktop app
+npm run dist:win    # Windows installers into release/
+npm run dist:linux  # Linux packages into release/ (needs Linux, or use the Release workflow)
 ```
+
+Pushing a tag like `v0.1.0` runs the [Release workflow](.github/workflows/release.yml), which builds every Windows and Linux package on GitHub's runners and attaches them to a GitHub Release.
 
 For `npm run dev`, start `opencode serve` yourself and put its address and password in `.env.local` (see [`.env.example`](.env.example)). Widgets and mods need the desktop app.
 

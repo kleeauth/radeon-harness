@@ -3,7 +3,14 @@ import { createOpencodeClient } from '@opencode-ai/sdk/client'
 
 declare global {
   interface Window {
-    opencodeApp?: { token: string; widgetOrigin: string; openModsFolder: () => void }
+    opencodeApp?: {
+      token: string
+      widgetOrigin: string
+      workspace: string
+      platform: string
+      openModsFolder: () => void
+      chooseWorkspace: () => Promise<boolean>
+    }
   }
 }
 

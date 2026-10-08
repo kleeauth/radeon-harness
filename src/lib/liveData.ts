@@ -6,6 +6,7 @@ export type LiveResult = {
   status: number
   url?: string
   contentType?: string
+  encoding?: 'utf8' | 'base64'
   body?: string
   error?: string
 }

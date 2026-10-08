@@ -54,31 +54,116 @@ async function waitForServer(port, timeoutMs = 20000) {
   throw new Error('opencode server did not become healthy in time')
 }
 
+const isWindows = process.platform === 'win32'
+
+// Apps started from a desktop menu (Linux especially) don't get the shell's PATH, so look in
+// the usual install locations too. OPENCODE_BIN overrides everything.
+function resolveOpencode() {
+  if (process.env.OPENCODE_BIN && fs.existsSync(process.env.OPENCODE_BIN)) return process.env.OPENCODE_BIN
+  const home = require('os').homedir()
+  const names = isWindows ? ['opencode.exe', 'opencode.cmd'] : ['opencode']
+  const dirs = [
+    ...(process.env.PATH || '').split(path.delimiter),
+    path.join(home, '.opencode', 'bin'),
+    ...(isWindows
+      ? [path.join(process.env.APPDATA || '', 'npm'), path.join(process.env.LOCALAPPDATA || '', 'Programs', 'opencode')]
+      : [
+          path.join(home, '.local', 'bin'),
+          path.join(home, '.bun', 'bin'),
+          path.join(home, '.npm-global', 'bin'),
+          '/usr/local/bin',
+          '/usr/bin',
+          '/opt/homebrew/bin',
+          '/home/linuxbrew/.linuxbrew/bin',
+          '/snap/bin',
+        ]),
+  ].filter(Boolean)
+  for (const dir of dirs) {
+    for (const name of names) {
+      const candidate = path.join(dir, name)
+      if (fs.existsSync(candidate)) return candidate
+    }
+  }
+  return null
+}
+
+let opencodeLog = ''
+
+// ---------- settings ----------
+// opencode works inside one folder: the workspace. Without a choice it's the home folder,
+// never the folder the app happened to be launched from (an install dir or system32).
+function settingsFile() {
+  return path.join(app.getPath('userData'), 'settings.json')
+}
+
+function readSettings() {
+  try {
+    return JSON.parse(fs.readFileSync(settingsFile(), 'utf8'))
+  } catch {
+    return {}
+  }
+}
+
+function writeSettings(patch) {
+  fs.mkdirSync(path.dirname(settingsFile()), { recursive: true })
+  fs.writeFileSync(settingsFile(), JSON.stringify({ ...readSettings(), ...patch }, null, 2))
+}
+
+function workspaceDir() {
+  const chosen = readSettings().workspace
+  if (chosen && fs.existsSync(chosen) && fs.statSync(chosen).isDirectory()) return chosen
+  return require('os').homedir()
+}
+
 async function startOpencode() {
+  const bin = resolveOpencode()
+  if (!bin) {
+    throw new Error(
+      'opencode was not found.\n\nInstall it from https://opencode.ai, then start Radeon Harness again. ' +
+        'If it is installed somewhere unusual, set the OPENCODE_BIN environment variable to its full path.',
+    )
+  }
   opencodePort = await freePort()
-  // one command string: shell:true with an args array is deprecated (DEP0190); the values here are numbers we chose
-  opencodeProc = spawn(`opencode serve --port ${opencodePort} --hostname 127.0.0.1`, {
-    env: { ...process.env, OPENCODE_SERVER_PASSWORD: OPENCODE_PASSWORD },
-    shell: true,
-    windowsHide: true,
-  })
+  const args = ['serve', '--port', String(opencodePort), '--hostname', '127.0.0.1']
+  const env = { ...process.env, OPENCODE_SERVER_PASSWORD: OPENCODE_PASSWORD }
+  const cwd = workspaceDir()
+  if (isWindows && /\.cmd$/i.test(bin)) {
+    // npm's .cmd shims need cmd.exe; one quoted string avoids the shell+args deprecation (DEP0190)
+    opencodeProc = spawn(`"${bin}" ${args.join(' ')}`, { env, cwd, shell: true, windowsHide: true })
+  } else {
+    // its own process group on Linux/macOS, so stopping it takes any children with it
+    opencodeProc = spawn(bin, args, { env, cwd, windowsHide: true, detached: !isWindows })
+  }
+  const keepLog = (chunk) => {
+    opencodeLog = (opencodeLog + chunk.toString()).slice(-2000)
+  }
+  opencodeProc.stdout?.on('data', keepLog)
+  opencodeProc.stderr?.on('data', keepLog)
+  opencodeProc.on('error', (err) => keepLog(`\n${err.message}`))
   opencodeProc.on('exit', (code) => {
     if (!app.isQuitting) {
-      dialog.showErrorBox('opencode stopped', `The opencode server exited (code ${code}). The app will close.`)
+      dialog.showErrorBox('opencode stopped', `The opencode server exited (code ${code}). The app will close.\n\n${opencodeLog.slice(-600)}`)
       app.quit()
     }
   })
-  await waitForServer(opencodePort)
+  try {
+    await waitForServer(opencodePort)
+  } catch (err) {
+    throw new Error(`${err.message}\n\n${opencodeLog.slice(-600)}`)
+  }
 }
 
 function stopOpencode() {
   if (!opencodeProc || !opencodeProc.pid) return
   try {
-    // shell:true means we own a cmd.exe wrapper; kill the whole tree on Windows
-    if (process.platform === 'win32') execSync(`taskkill /pid ${opencodeProc.pid} /t /f`, { stdio: 'ignore' })
-    else opencodeProc.kill('SIGTERM')
+    if (isWindows) execSync(`taskkill /pid ${opencodeProc.pid} /t /f`, { stdio: 'ignore' })
+    else process.kill(-opencodeProc.pid, 'SIGTERM') // negative pid: the whole process group
   } catch {
-    // already gone
+    try {
+      opencodeProc.kill('SIGTERM')
+    } catch {
+      // already gone
+    }
   }
   opencodeProc = null
 }
@@ -158,7 +243,12 @@ async function readCapped(res) {
     }
     chunks.push(value)
   }
-  return Buffer.concat(chunks).toString('utf8')
+  return Buffer.concat(chunks)
+}
+
+// text stays text; images and other binary content travel as base64
+function isTextual(contentType) {
+  return /^text\/|json|xml|javascript|csv|svg/.test(contentType) || contentType === ''
 }
 
 async function brokeredFetch(rawUrl) {
@@ -176,12 +266,16 @@ async function brokeredFetch(rawUrl) {
       url = await assertPublicUrl(new URL(location, url).toString()) // every hop is re-checked
       continue
     }
+    const contentType = res.headers.get('content-type') || ''
+    const bytes = await readCapped(res)
+    const textual = isTextual(contentType)
     return {
       ok: res.ok,
       status: res.status,
       url: url.toString(),
-      contentType: res.headers.get('content-type') || '',
-      body: await readCapped(res),
+      contentType,
+      encoding: textual ? 'utf8' : 'base64',
+      body: bytes.toString(textual ? 'utf8' : 'base64'),
     }
   }
   throw new Error('too many redirects')
@@ -335,23 +429,58 @@ const BOOTSTRAP = BASE_STYLE + '<script>(' + function () {
     pending.delete(e.data.id);
     const r = e.data.result;
     if (!r.status) return p.reject(new Error(r.error || 'request failed'));
+    const b64 = r.encoding === 'base64';
+    const text = () => (b64 ? new TextDecoder().decode(Uint8Array.from(atob(r.body), (c) => c.charCodeAt(0))) : r.body);
     p.resolve({
       ok: r.ok,
       status: r.status,
       url: r.url,
       headers: { get: (k) => (String(k).toLowerCase() === 'content-type' ? r.contentType : null) },
-      text: async () => r.body,
-      json: async () => JSON.parse(r.body),
+      text: async () => text(),
+      json: async () => JSON.parse(text()),
+      dataUrl: async () =>
+        'data:' + (r.contentType || 'application/octet-stream') + ';base64,' +
+        (b64 ? r.body : btoa(String.fromCharCode(...new TextEncoder().encode(r.body)))),
     });
   });
+  const harnessFetch = (url) =>
+    new Promise((resolve, reject) => {
+      const id = ++seq;
+      pending.set(id, { resolve, reject });
+      parent.postMessage({ type: 'widget-fetch', id, url: String(url) }, '*');
+    });
   window.harness = {
-    fetch: (url) =>
-      new Promise((resolve, reject) => {
-        const id = ++seq;
-        pending.set(id, { resolve, reject });
-        parent.postMessage({ type: 'widget-fetch', id, url: String(url) }, '*');
-      }),
+    fetch: harnessFetch,
+    image: async (url) => {
+      const res = await harnessFetch(url);
+      if (!res.ok) throw new Error('image request failed: ' + res.status);
+      return res.dataUrl();
+    },
   };
+
+  // <img src="https://..."> can't load directly (no network); fetch it through the broker instead
+  const proxyImage = (img) => {
+    const src = img.getAttribute('src');
+    if (!src || !src.toLowerCase().startsWith('https://') || img.dataset.harnessSrc === src) return;
+    img.dataset.harnessSrc = src;
+    window.harness.image(src).then(
+      (dataUrl) => {
+        if (img.dataset.harnessSrc === src) img.src = dataUrl;
+      },
+      () => {},
+    );
+  };
+  const scan = (node) => {
+    if (node.nodeType !== 1) return;
+    if (node.tagName === 'IMG') proxyImage(node);
+    node.querySelectorAll && node.querySelectorAll('img').forEach(proxyImage);
+  };
+  new MutationObserver((records) => {
+    for (const rec of records) {
+      if (rec.type === 'attributes') scan(rec.target);
+      else rec.addedNodes.forEach(scan);
+    }
+  }).observe(document.documentElement, { subtree: true, childList: true, attributes: true, attributeFilter: ['src'] });
 } + ')()<\\/script>';
 window.addEventListener('message', (e) => {
   if (e.source !== parent || !e.data || e.data.type !== 'widget-render') return;
@@ -443,7 +572,22 @@ ipcMain.on('app:open-mods', () => {
 })
 
 ipcMain.on('app:config', (event) => {
-  event.returnValue = { token: APP_TOKEN, widgetOrigin: `http://127.0.0.1:${widgetPort}` }
+  event.returnValue = { token: APP_TOKEN, widgetOrigin: `http://127.0.0.1:${widgetPort}`, workspace: workspaceDir() }
+})
+
+// switching folders restarts the app so opencode starts fresh inside the new one
+ipcMain.handle('app:choose-workspace', async (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender)
+  const result = await dialog.showOpenDialog(win, {
+    title: 'Choose a workspace folder',
+    defaultPath: workspaceDir(),
+    properties: ['openDirectory', 'createDirectory'],
+  })
+  if (result.canceled || !result.filePaths[0] || result.filePaths[0] === workspaceDir()) return false
+  writeSettings({ workspace: result.filePaths[0] })
+  app.relaunch()
+  app.quit()
+  return true
 })
 
 // One app at a time: a second launch focuses the existing window instead of starting another opencode.

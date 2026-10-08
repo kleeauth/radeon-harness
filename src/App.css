@@ -73,6 +73,40 @@
   padding: 1px 5px;
 }
 
+.workspace-btn {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  color: var(--text-2);
+  font-size: 13px;
+  text-align: left;
+  transition: background 0.12s;
+}
+.workspace-btn:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+.workspace-name {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--mono);
+  font-size: 12.5px;
+}
+.workspace-switch {
+  font-size: 11px;
+  color: var(--muted);
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.workspace-btn:hover .workspace-switch {
+  opacity: 1;
+}
+
 .sidebar-search {
   display: flex;
   align-items: center;

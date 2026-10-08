@@ -1,5 +1,5 @@
-import { useState, type ReactNode } from 'react'
-import ReactMarkdown from 'react-markdown'
+import { memo, useState, type ReactNode } from 'react'
+import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { Part, ToolPart } from '@opencode-ai/sdk'
 import {
@@ -41,38 +41,51 @@ function CodeBlock({ lang, code }: { lang: string; code: string }) {
   )
 }
 
-// complete=false while the text is still streaming: widgets wait so the frame isn't rebuilt per token
-export function Markdown({ text, complete = true }: { text: string; complete?: boolean }) {
+// The renderers must keep a stable identity: a new function per render makes React treat each
+// code block as a new component type and remount it, which reloaded every widget iframe on any
+// re-render (scrolling included) and made the conversation jump.
+type CodeProps = { className?: string; children?: ReactNode }
+
+function makeComponents(complete: boolean): Components {
+  return {
+    pre: ({ children }) => <>{children}</>,
+    code: ({ className, children }: CodeProps) => {
+      const match = /language-(\w+)/.exec(className ?? '')
+      const content = String(children ?? '')
+      if (match?.[1] === 'widget') {
+        // while streaming, widgets wait so the frame isn't rebuilt per token
+        return complete ? <Widget html={content} /> : <WidgetPending />
+      }
+      // fenced blocks carry a language class or span multiple lines; everything else is inline
+      if (match || content.includes('\n')) {
+        return <CodeBlock lang={match?.[1] ?? ''} code={content.replace(/\n$/, '')} />
+      }
+      return <code className="inline-code">{children}</code>
+    },
+    a: ({ href, children }) => (
+      <a href={href} target="_blank" rel="noreferrer">
+        {children}
+      </a>
+    ),
+  }
+}
+
+const COMPLETE_COMPONENTS = makeComponents(true)
+const STREAMING_COMPONENTS = makeComponents(false)
+const REMARK_PLUGINS = [remarkGfm]
+
+export const Markdown = memo(function Markdown({ text, complete = true }: { text: string; complete?: boolean }) {
   return (
     <div className="md">
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        components={{
-          pre: ({ children }) => <>{children}</>,
-          code: ({ className, children }) => {
-            const match = /language-(\w+)/.exec(className ?? '')
-            const content = String(children ?? '')
-            if (match?.[1] === 'widget') {
-              return complete ? <Widget html={content} /> : <WidgetPending />
-            }
-            // fenced blocks carry a language class or span multiple lines; everything else is inline
-            if (match || content.includes('\n')) {
-              return <CodeBlock lang={match?.[1] ?? ''} code={content.replace(/\n$/, '')} />
-            }
-            return <code className="inline-code">{children}</code>
-          },
-          a: ({ href, children }) => (
-            <a href={href} target="_blank" rel="noreferrer">
-              {children}
-            </a>
-          ),
-        }}
+        remarkPlugins={REMARK_PLUGINS}
+        components={complete ? COMPLETE_COMPONENTS : STREAMING_COMPONENTS}
       >
         {text}
       </ReactMarkdown>
     </div>
   )
-}
+})
 
 function toolIcon(tool: string): ReactNode {
   const t = tool.toLowerCase()
@@ -148,7 +161,8 @@ function Reasoning({ text, live }: { text: string; live: boolean }) {
   )
 }
 
-export function PartView({ part, live }: { part: Part; live: boolean }) {
+// memo: the reducer only creates a new part object when that part changes
+export const PartView = memo(function PartView({ part, live }: { part: Part; live: boolean }) {
   switch (part.type) {
     case 'text':
       return part.ignored || !part.text ? null : <Markdown text={part.text} complete={!live || !!part.time?.end} />
@@ -159,4 +173,4 @@ export function PartView({ part, live }: { part: Part; live: boolean }) {
     default:
       return null
   }
-}
+})

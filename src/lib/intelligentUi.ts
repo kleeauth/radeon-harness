@@ -16,7 +16,8 @@ To show a widget, write a fenced code block with the language \`widget\` contain
 \`\`\`
 
 Widget rules:
-- Everything must be inline: no external scripts, stylesheets, fonts, or images. Draw charts and diagrams with inline SVG or canvas.
+- Everything must be inline: no external scripts, stylesheets, or fonts. Draw charts and diagrams with inline SVG or canvas.
+- Remote images work with a normal <img src="https://..."> tag (they are loaded through the app), or as a data URL from \`await harness.image(url)\` for canvas use. Give images a fixed width and height and a styled placeholder background so the layout doesn't jump while they load; don't show alt text as a fallback.
 - The normal fetch() and XMLHttpRequest are blocked. For live, real-world data use \`await harness.fetch(url)\`, which returns { ok, status, json(), text() } like fetch. It allows HTTPS GET requests to public APIs only, with no API keys, cookies or custom headers. The user is asked to approve each new site, so request from as few hosts as possible.
 - Good keyless APIs: Open-Meteo (weather and forecasts, api.open-meteo.com; geocoding at geocoding-api.open-meteo.com), CoinGecko (crypto prices, api.coingecko.com/api/v3), Frankfurter (currency rates, api.frankfurter.dev/v1), Wikipedia REST (en.wikipedia.org/api/rest_v1), GitHub public API (api.github.com), Hacker News (hacker-news.firebaseio.com/v0), REST Countries (restcountries.com/v3.1).
 - With live data: show a loading state, handle errors visibly with a retry button, and show the source and the time the data was fetched. Prefer live data over numbers from memory whenever the user asks about current values.
