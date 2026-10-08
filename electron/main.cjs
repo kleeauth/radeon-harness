@@ -13,6 +13,7 @@ const OPENCODE_PASSWORD = crypto.randomBytes(24).toString('hex')
 const basicAuth = 'Basic ' + Buffer.from(`opencode:${OPENCODE_PASSWORD}`).toString('base64')
 
 let opencodeProc = null
+let opencodeExited = null
 let opencodePort = 0
 let gatewayPort = 0
 let widgetPort = 0
@@ -41,9 +42,11 @@ function getJson(port, urlPath) {
   })
 }
 
-async function waitForServer(port, timeoutMs = 20000) {
+// opencode's first start on a new machine sets itself up and can take well over 20 seconds
+async function waitForServer(port, timeoutMs = 90000) {
   const started = Date.now()
   while (Date.now() - started < timeoutMs) {
+    if (opencodeExited) throw new Error(`opencode exited during startup (code ${opencodeExited.code})`)
     try {
       await getJson(port, '/global/health')
       return
@@ -51,7 +54,26 @@ async function waitForServer(port, timeoutMs = 20000) {
       await new Promise((r) => setTimeout(r, 300))
     }
   }
-  throw new Error('opencode server did not become healthy in time')
+  throw new Error(`opencode did not start within ${timeoutMs / 1000} seconds`)
+}
+
+// ---------- startup log ----------
+// Every startup step goes to the terminal and to a file, so a failed start on someone else's
+// machine can be diagnosed. Rewritten on each launch.
+let logFile = null
+function log(...parts) {
+  const line = `[${new Date().toISOString()}] ${parts.join(' ')}`
+  console.log(line)
+  try {
+    if (!logFile) {
+      logFile = path.join(app.getPath('userData'), 'logs', 'main.log')
+      fs.mkdirSync(path.dirname(logFile), { recursive: true })
+      fs.writeFileSync(logFile, '')
+    }
+    fs.appendFileSync(logFile, line + '\n')
+  } catch {
+    // logging must never break startup
+  }
 }
 
 const isWindows = process.platform === 'win32'
@@ -127,6 +149,7 @@ async function startOpencode() {
   const args = ['serve', '--port', String(opencodePort), '--hostname', '127.0.0.1']
   const env = { ...process.env, OPENCODE_SERVER_PASSWORD: OPENCODE_PASSWORD }
   const cwd = workspaceDir()
+  log('starting opencode:', bin, 'in', cwd, 'on port', opencodePort)
   if (isWindows && /\.cmd$/i.test(bin)) {
     // npm's .cmd shims need cmd.exe; one quoted string avoids the shell+args deprecation (DEP0190)
     opencodeProc = spawn(`"${bin}" ${args.join(' ')}`, { env, cwd, shell: true, windowsHide: true })
@@ -135,23 +158,30 @@ async function startOpencode() {
     opencodeProc = spawn(bin, args, { env, cwd, windowsHide: true, detached: !isWindows })
   }
   const keepLog = (chunk) => {
-    opencodeLog = (opencodeLog + chunk.toString()).slice(-2000)
+    const text = chunk.toString()
+    opencodeLog = (opencodeLog + text).slice(-4000)
+    log('[opencode]', text.trimEnd())
   }
   opencodeProc.stdout?.on('data', keepLog)
   opencodeProc.stderr?.on('data', keepLog)
   opencodeProc.on('error', (err) => keepLog(`\n${err.message}`))
   opencodeProc.on('exit', (code) => {
-    if (!app.isQuitting) {
-      dialog.showErrorBox('opencode stopped', `The opencode server exited (code ${code}). The app will close.\n\n${opencodeLog.slice(-600)}`)
-      app.quit()
+    opencodeExited = { code }
+    log('opencode exited with code', code)
+    if (!app.isQuitting && serverReady) {
+      showStatus('error', 'opencode stopped', `The opencode server exited (code ${code}). Restart Radeon Harness.`, opencodeLog)
     }
   })
   try {
     await waitForServer(opencodePort)
+    serverReady = true
+    log('opencode is ready')
   } catch (err) {
-    throw new Error(`${err.message}\n\n${opencodeLog.slice(-600)}`)
+    throw Object.assign(new Error(err.message), { details: opencodeLog })
   }
 }
+
+let serverReady = false
 
 function stopOpencode() {
   if (!opencodeProc || !opencodeProc.pid) return
@@ -178,6 +208,12 @@ const MIME = {
   '.json': 'application/json',
 }
 
+// opencode marks vision models with capabilities.attachment and/or an image input modality
+function acceptsImages(m) {
+  const c = m.capabilities || {}
+  return Boolean(c.attachment || (c.input && c.input.image))
+}
+
 // Only the sanitized model list leaves the gateway. API keys stay in opencode.
 async function handleProviders(res) {
   const body = await getJson(opencodePort, '/config/providers')
@@ -185,7 +221,7 @@ async function handleProviders(res) {
     .map((p) => ({
       id: p.id,
       name: p.name,
-      models: Object.values(p.models).map((m) => ({ id: m.id, name: m.name })),
+      models: Object.values(p.models).map((m) => ({ id: m.id, name: m.name, images: acceptsImages(m) })),
     }))
     .filter((p) => p.models.length > 0)
   res.writeHead(200, { 'Content-Type': 'application/json' })
@@ -548,6 +584,35 @@ function startGateway() {
   })
 }
 
+let mainWindow = null
+
+const escapeHtml = (s) =>
+  String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c])
+
+// The window shows from the first moment: a status screen while opencode starts, then the app.
+// Errors land here too, so they can't get lost in a dialog the desktop never displays.
+function showStatus(kind, title, detail, extra = '') {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  const spinner = kind === 'loading' ? '<div class="spin"></div>' : '<div class="mark">!</div>'
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Radeon Harness</title><style>
+    html,body{margin:0;height:100%;background:#0e0e10;color:#ececee;font:14px/1.6 'Segoe UI',system-ui,sans-serif;-webkit-app-region:drag}
+    main{height:100%;display:grid;place-content:center;gap:14px;text-align:center;padding:24px;box-sizing:border-box}
+    .logo{width:52px;height:52px;border-radius:14px;background:#ed3b45;display:grid;place-items:center;margin:0 auto;font-weight:700;font-size:26px;color:#fff}
+    h1{margin:0;font-size:20px;font-weight:600}
+    p{margin:0;color:#b4b4ba;max-width:560px}
+    .spin{width:22px;height:22px;margin:4px auto 0;border:2px solid #3a3a41;border-top-color:#ed3b45;border-radius:50%;animation:s .8s linear infinite}
+    .mark{width:26px;height:26px;margin:4px auto 0;border-radius:50%;background:#ff5f56;color:#fff;font-weight:700;display:grid;place-items:center}
+    pre{margin:6px auto 0;max-width:720px;max-height:260px;overflow:auto;text-align:left;background:#141416;border:1px solid #2a2a2f;border-radius:10px;padding:12px;color:#9a9aa3;font:12px/1.5 Consolas,monospace;white-space:pre-wrap;-webkit-app-region:no-drag;user-select:text}
+    @keyframes s{to{transform:rotate(360deg)}}
+  </style></head><body><main>
+    <div class="logo">R</div>${spinner}
+    <h1>${escapeHtml(title)}</h1><p>${escapeHtml(detail)}</p>
+    ${extra ? `<pre>${escapeHtml(extra)}</pre>` : ''}
+    ${logFile && kind !== 'loading' ? `<p style="font-size:12px;color:#7d7d86">Log file: ${escapeHtml(logFile)}</p>` : ''}
+  </main></body></html>`
+  mainWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html))
+}
+
 function createWindow() {
   const win = new BrowserWindow({
     width: 1320,
@@ -576,7 +641,10 @@ function createWindow() {
     if (/^https?:\/\//.test(url)) shell.openExternal(url)
     return { action: 'deny' }
   })
-  win.loadURL(`http://127.0.0.1:${gatewayPort}/`)
+  win.webContents.on('render-process-gone', (_e, details) => log('renderer gone:', details.reason, details.exitCode))
+  win.webContents.on('did-fail-load', (_e, code, desc, url) => log('load failed:', code, desc, url))
+  mainWindow = win
+  return win
 }
 
 ipcMain.on('app:open-mods', () => {
@@ -619,6 +687,12 @@ function windowIcon() {
   return !app.isPackaged && fs.existsSync(icon) ? icon : undefined
 }
 
+// Chromium's Vulkan path doesn't work with Wayland (Fedora's default desktop) and logs an error
+// before falling back. The app needs nothing Vulkan offers, so don't try it on Linux at all.
+if (process.platform === 'linux') {
+  app.commandLine.appendSwitch('disable-features', 'Vulkan,VulkanFromANGLE,DefaultANGLEVulkan')
+}
+
 // One app at a time: a second launch focuses the existing window instead of starting another opencode.
 if (!app.requestSingleInstanceLock()) {
   app.quit()
@@ -632,16 +706,26 @@ if (!app.requestSingleInstanceLock()) {
   })
 }
 
+app.on('child-process-gone', (_e, details) => log('child process gone:', details.type, details.reason, details.exitCode))
+
 app.whenReady().then(async () => {
   if (!app.hasSingleInstanceLock()) return
+  log(`Radeon Harness ${app.getVersion()} on ${process.platform} ${process.arch}, Electron ${process.versions.electron}`)
+  if (process.platform === 'linux') {
+    log('session:', process.env.XDG_SESSION_TYPE || '?', 'desktop:', process.env.XDG_CURRENT_DESKTOP || '?')
+  }
+  createWindow()
+  showStatus('loading', 'Starting opencode…', 'The first start on a new machine can take up to a minute.')
   try {
     await startOpencode()
     widgetPort = await startWidgetHost()
     gatewayPort = await startGateway()
-    createWindow()
+    log('gateway on port', gatewayPort, 'widget host on port', widgetPort)
+    await mainWindow.loadURL(`http://127.0.0.1:${gatewayPort}/`)
+    log('app loaded')
   } catch (err) {
-    dialog.showErrorBox('Could not start', String(err))
-    app.quit()
+    log('startup failed:', err && err.stack ? err.stack : String(err))
+    showStatus('error', "Radeon Harness couldn't start", err.message || String(err), err.details || '')
   }
 })
 

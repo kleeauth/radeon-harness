@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { MessageView } from '../lib/chatState'
 import { Markdown, PartView } from './MessageParts'
-import type { AssistantMessage } from '@opencode-ai/sdk'
+import type { AssistantMessage, FilePart } from '@opencode-ai/sdk'
 import { AlertIcon, ArrowDownIcon, CheckIcon, CopyIcon, RetryIcon } from './Icons'
 
 type Props = {
@@ -64,6 +64,14 @@ function Actions({ text, onRetry }: { text: string; onRetry?: () => void }) {
 export function Conversation({ messages, busy, onRetry }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const [atBottom, setAtBottom] = useState(true)
+  const [viewing, setViewing] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!viewing) return
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setViewing(null)
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [viewing])
   const last = messages[messages.length - 1]
   const lastHasText = last?.info.role === 'assistant' && last.parts.some((p) => p.type === 'text' && p.text)
 
@@ -89,13 +97,26 @@ export function Conversation({ messages, busy, onRetry }: Props) {
         <div className="conversation-inner">
           {messages.map((m, i) => {
             if (m.info.role === 'user') {
+              const pictures = m.parts.filter(
+                (p): p is FilePart => p.type === 'file' && p.mime.startsWith('image/') && !!p.url,
+              )
+              const hasText = m.parts.some((p) => p.type === 'text' && !p.synthetic && p.text)
               return (
                 <div key={m.info.id} className="msg-user">
-                  <div className="bubble">
-                    {m.parts.map((p) =>
-                      p.type === 'text' && !p.synthetic ? <Markdown key={p.id} text={p.text} /> : null,
-                    )}
-                  </div>
+                  {pictures.length > 0 && (
+                    <div className="msg-images">
+                      {pictures.map((p) => (
+                        <img key={p.id} src={p.url} alt={p.filename ?? 'image'} onClick={() => setViewing(p.url)} />
+                      ))}
+                    </div>
+                  )}
+                  {hasText && (
+                    <div className="bubble">
+                      {m.parts.map((p) =>
+                        p.type === 'text' && !p.synthetic ? <Markdown key={p.id} text={p.text} /> : null,
+                      )}
+                    </div>
+                  )}
                 </div>
               )
             }
@@ -136,6 +157,11 @@ export function Conversation({ messages, busy, onRetry }: Props) {
           )}
         </div>
       </div>
+      {viewing && (
+        <div className="scrim" onClick={() => setViewing(null)}>
+          <img className="image-viewer" src={viewing} alt="" />
+        </div>
+      )}
       {!atBottom && (
         <button type="button" className="jump-latest" onClick={jump} aria-label="Jump to latest">
           <ArrowDownIcon size={16} />

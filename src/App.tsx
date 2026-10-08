@@ -11,6 +11,7 @@ import { useChat } from './lib/useChat'
 import { useCommands, type Builtin } from './lib/useCommands'
 import { INTELLIGENT_UI_PROMPT } from './lib/intelligentUi'
 import { buildModPrompt } from './lib/modPrompt'
+import { MAX_IMAGES, readImage, type ImageAttachment } from './lib/images'
 import { mods, useMods } from './mods/runtime'
 import { Sidebar } from './components/Sidebar'
 import { Composer } from './components/Composer'
@@ -62,6 +63,7 @@ export default function App() {
   const [model, setModel] = useState<ModelRef | null>(() => readPref<ModelRef | null>(MODEL_KEY, null))
   const [intelligent, setIntelligent] = useState(() => readPref(INTELLIGENT_KEY, true))
   const [draft, setDraft] = useState('')
+  const [images, setImages] = useState<ImageAttachment[]>([])
   const [error, setError] = useState<string | null>(null)
   const [modsOpen, setModsOpen] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<{ kind: 'one'; session: Session } | { kind: 'all' } | null>(null)
@@ -173,19 +175,33 @@ export default function App() {
   }
 
   // a plain prompt: mods may rewrite or swallow it first
-  const sendPrompt = async (text: string) => {
+  const sendPrompt = async (text: string, withImages: ImageAttachment[] = []) => {
     const id = await ensureThread()
     const result = await mods.dispatch('prompt.submit', { sessionID: id, text })
     if (!result) return
-    await chat.send(id, result.text, model, intelligent ? INTELLIGENT_UI_PROMPT : undefined)
+    await chat.send(id, result.text, model, intelligent ? INTELLIGENT_UI_PROMPT : undefined, withImages)
+  }
+
+  const addImages = async (files: File[]) => {
+    const room = MAX_IMAGES - images.length
+    if (room <= 0) return setError(`Up to ${MAX_IMAGES} images per message`)
+    if (files.length > room) setError(`Only the first ${room} images were attached (max ${MAX_IMAGES})`)
+    const read = await Promise.allSettled(files.slice(0, room).map(readImage))
+    const ok = read.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []))
+    if (ok.length < read.length) setError("Some images couldn't be read")
+    setImages((list) => [...list, ...ok].slice(0, MAX_IMAGES))
   }
 
   const submit = async (override?: string) => {
     const text = (override ?? draft).trim()
-    if (!text) return
+    // a retry or "Fix it" sends its own text and leaves attachments in the composer alone
+    const attached = override === undefined ? images : []
+    if (!text && !attached.length) return
     setDraft('')
+    if (attached.length) setImages([])
     setError(null)
     try {
+      if (!text) return await sendPrompt('', attached)
       const cmd = commands.parse(text)
       if (cmd?.kind === 'builtin' && cmd.builtin.name === 'mod') {
         const modsDir = window.opencodeApp?.modsDir
@@ -210,9 +226,10 @@ export default function App() {
         const id = await ensureThread()
         return await chat.runCommand(id, cmd.name, cmd.args, model)
       }
-      await sendPrompt(text)
+      await sendPrompt(text, attached)
     } catch (e) {
       setDraft(text)
+      if (attached.length) setImages(attached)
       setError(`Send failed: ${e}`)
     }
   }
@@ -279,6 +296,9 @@ export default function App() {
         commands={commands.list}
         intelligent={intelligent}
         onToggleIntelligent={() => setIntelligent((v) => !v)}
+        images={images}
+        onAddImages={(files) => void addImages(files)}
+        onRemoveImage={(id) => setImages((list) => list.filter((img) => img.id !== id))}
       />
       <ModStatusLine />
     </>

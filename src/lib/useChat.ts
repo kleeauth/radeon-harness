@@ -13,6 +13,7 @@ import {
   type PendingQuestion,
 } from './chatState'
 import { forwardToMods } from '../mods/bridge'
+import type { ImageAttachment } from './images'
 
 type Action =
   | { type: 'event'; event: Event }
@@ -97,13 +98,20 @@ export function useChat() {
   }, [])
 
   // Fire and forget: the reply arrives through the event stream.
-  const send = useCallback(async (sessionID: string, text: string, model: ModelRef | null, system?: string) => {
-    const res = await client.session.promptAsync({
-      path: { id: sessionID },
-      body: { model: model ?? undefined, system: system || undefined, parts: [{ type: 'text', text }] },
-    })
-    if (res.error) throw new Error(JSON.stringify(res.error))
-  }, [])
+  const send = useCallback(
+    async (sessionID: string, text: string, model: ModelRef | null, system?: string, images: ImageAttachment[] = []) => {
+      const parts = [
+        ...images.map((img) => ({ type: 'file' as const, mime: img.mime, filename: img.name, url: img.dataUrl })),
+        ...(text ? [{ type: 'text' as const, text }] : []),
+      ]
+      const res = await client.session.promptAsync({
+        path: { id: sessionID },
+        body: { model: model ?? undefined, system: system || undefined, parts },
+      })
+      if (res.error) throw new Error(JSON.stringify(res.error))
+    },
+    [],
+  )
 
   // the session.deleted event removes it from the sidebar
   const deleteThread = useCallback(async (sessionID: string) => {

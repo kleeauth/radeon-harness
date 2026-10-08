@@ -30,7 +30,8 @@ export type ModelRef = { providerID: string; modelID: string }
 export type ProviderOption = {
   id: string
   name: string
-  models: Array<{ id: string; name: string }>
+  // images: the model accepts picture attachments
+  models: Array<{ id: string; name: string; images?: boolean }>
 }
 
 export type ProviderCatalog = {

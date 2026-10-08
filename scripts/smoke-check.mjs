@@ -1,12 +1,22 @@
 // Connects to the running app over the DevTools protocol and checks it actually works:
 // the window loaded, opencode connected, and the bundled mods were found.
+// opencode's first start in a fresh container is slow, so this waits patiently.
 const DEBUG = 'http://127.0.0.1:9222'
-const deadline = Date.now() + 60_000
+const deadline = Date.now() + 150_000
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
-const pages = await (await fetch(`${DEBUG}/json`)).json()
-const page = pages.find((p) => p.type === 'page')
-if (!page) throw new Error('no app window found')
-console.log('window:', page.title, page.url)
+let page
+while (!page && Date.now() < deadline) {
+  try {
+    const pages = await (await fetch(`${DEBUG}/json`)).json()
+    page = pages.find((p) => p.type === 'page')
+  } catch {
+    // debug port not up yet
+  }
+  if (!page) await sleep(1000)
+}
+if (!page) throw new Error('no app window appeared within 150 seconds')
+console.log('window:', page.title)
 
 const ws = new WebSocket(page.webSocketDebuggerUrl)
 await new Promise((resolve, reject) => {
@@ -32,13 +42,17 @@ let state
 while (Date.now() < deadline) {
   state = await evaluate(`({
     title: document.title,
+    url: location.protocol,
     platform: document.documentElement.dataset.platform,
     connected: document.querySelector('.footer-status')?.innerText ?? '',
     mods: document.querySelector('.mods-btn:last-child')?.innerText ?? '',
     composer: !!document.querySelector('.composer textarea'),
-  })`)
-  if (state?.connected === 'Connected') break
-  await new Promise((r) => setTimeout(r, 1000))
+    statusScreen: document.querySelector('main h1')?.innerText ?? '',
+  })`).catch(() => null)
+  if (state?.connected === 'Connected' && /Mods · \d/.test(state?.mods ?? '')) break
+  // the startup screen turned into an error: no point waiting further
+  if (state?.statusScreen && /couldn't start|stopped/i.test(state.statusScreen)) break
+  await sleep(1000)
 }
 ws.close()
 console.log('state:', JSON.stringify(state))
@@ -46,7 +60,7 @@ console.log('state:', JSON.stringify(state))
 const problems = []
 if (state?.title !== 'Radeon Harness') problems.push(`unexpected title: ${state?.title}`)
 if (state?.platform !== 'linux') problems.push(`platform is ${state?.platform}, expected linux`)
-if (state?.connected !== 'Connected') problems.push('opencode never connected')
+if (state?.connected !== 'Connected') problems.push(`opencode never connected (screen: ${state?.statusScreen || 'app'})`)
 if (!/Mods · 3/.test(state?.mods ?? '')) problems.push(`bundled mods not loaded: ${state?.mods}`)
 if (!state?.composer) problems.push('composer missing')
 

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ModelRef, ProviderOption } from '../lib/opencode'
-import { ArrowUpIcon, SparkleIcon, StopIcon } from './Icons'
+import { imagesFrom, MAX_IMAGES, type ImageAttachment } from '../lib/images'
+import { AlertIcon, ArrowUpIcon, ImageIcon, SparkleIcon, StopIcon, XIcon } from './Icons'
 import { ModelPicker } from './ModelPicker'
 
 export type SlashCommand = { name: string; description: string; source: string }
@@ -17,14 +18,34 @@ type Props = {
   commands: SlashCommand[]
   intelligent: boolean
   onToggleIntelligent: () => void
+  images: ImageAttachment[]
+  onAddImages: (files: File[]) => void
+  onRemoveImage: (id: string) => void
   placeholder?: string
 }
 
 export function Composer(props: Props) {
-  const { value, onChange, onSubmit, onStop, busy, providers, model, onModelChange, commands, intelligent, onToggleIntelligent } = props
+  const {
+    value,
+    onChange,
+    onSubmit,
+    onStop,
+    busy,
+    providers,
+    model,
+    onModelChange,
+    commands,
+    intelligent,
+    onToggleIntelligent,
+    images,
+    onAddImages,
+    onRemoveImage,
+  } = props
   const ref = useRef<HTMLTextAreaElement>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
   const [selected, setSelected] = useState(0)
   const [dismissed, setDismissed] = useState(false)
+  const [dragging, setDragging] = useState(false)
 
   // grow with content up to a cap, then scroll
   useEffect(() => {
@@ -52,19 +73,40 @@ export function Composer(props: Props) {
     if (slashQuery === undefined) setDismissed(false)
   }, [slashQuery])
 
+  const modelSeesImages = useMemo(() => {
+    if (!model) return true
+    const m = providers.find((p) => p.id === model.providerID)?.models.find((x) => x.id === model.modelID)
+    return m?.images ?? true
+  }, [providers, model])
+
   const complete = (name: string) => {
     onChange(`/${name} `)
     ref.current?.focus()
   }
 
-  const canSend = value.trim().length > 0 && !busy
+  const canSend = (value.trim().length > 0 || images.length > 0) && !busy
+  const full = images.length >= MAX_IMAGES
 
   return (
     <form
-      className="composer"
+      className={dragging ? 'composer dragging' : 'composer'}
       onSubmit={(e) => {
         e.preventDefault()
         if (canSend) onSubmit()
+      }}
+      onDragOver={(e) => {
+        if (!Array.from(e.dataTransfer.items).some((i) => i.kind === 'file')) return
+        e.preventDefault()
+        setDragging(true)
+      }}
+      onDragLeave={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragging(false)
+      }}
+      onDrop={(e) => {
+        e.preventDefault()
+        setDragging(false)
+        const files = imagesFrom(e.dataTransfer.files)
+        if (files.length) onAddImages(files)
       }}
     >
       {menuOpen && (
@@ -90,12 +132,39 @@ export function Composer(props: Props) {
         </div>
       )}
 
+      {dragging && <div className="drop-hint">Drop images to attach</div>}
+
+      {images.length > 0 && (
+        <div className="attachments">
+          {images.map((img) => (
+            <div key={img.id} className="attachment" title={img.name}>
+              <img src={img.dataUrl} alt={img.name} />
+              <button type="button" className="attachment-remove" onClick={() => onRemoveImage(img.id)} aria-label={`Remove ${img.name}`}>
+                <XIcon size={11} />
+              </button>
+            </div>
+          ))}
+          {!modelSeesImages && (
+            <div className="attachment-warning">
+              <AlertIcon size={13} /> This model can't see images. Pick one that can, e.g. Claude or GPT.
+            </div>
+          )}
+        </div>
+      )}
+
       <textarea
         ref={ref}
         value={value}
         rows={1}
-        placeholder={props.placeholder ?? 'Ask anything, or type / for commands'}
+        placeholder={props.placeholder ?? 'Ask anything, paste an image, or type / for commands'}
         onChange={(e) => onChange(e.target.value)}
+        onPaste={(e) => {
+          const files = imagesFrom(e.clipboardData.items)
+          if (!files.length) return
+          // a pasted screenshot has no text worth inserting; mixed content keeps its text
+          if (!e.clipboardData.getData('text/plain')) e.preventDefault()
+          onAddImages(files)
+        }}
         onKeyDown={(e) => {
           if (menuOpen) {
             if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
@@ -122,6 +191,28 @@ export function Composer(props: Props) {
         }}
       />
       <div className="composer-bar">
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/gif"
+          multiple
+          hidden
+          onChange={(e) => {
+            const files = imagesFrom(e.target.files)
+            if (files.length) onAddImages(files)
+            e.target.value = ''
+          }}
+        />
+        <button
+          type="button"
+          className="icon-btn attach-btn"
+          onClick={() => fileRef.current?.click()}
+          disabled={full}
+          aria-label="Attach images"
+          title={full ? `Up to ${MAX_IMAGES} images per message` : 'Attach images (or paste / drop them)'}
+        >
+          <ImageIcon size={17} />
+        </button>
         <ModelPicker providers={providers} value={model} onChange={onModelChange} />
         <button
           type="button"

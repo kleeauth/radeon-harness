@@ -22,7 +22,10 @@ export default defineConfig(({ mode }) => {
             providers: Array<{
               id: string
               name: string
-              models: Record<string, { id: string; name: string }>
+              models: Record<
+                string,
+                { id: string; name: string; capabilities?: { attachment?: boolean; input?: { image?: boolean } } }
+              >
             }>
             default?: Record<string, string>
           }
@@ -30,7 +33,11 @@ export default defineConfig(({ mode }) => {
             .map((p) => ({
               id: p.id,
               name: p.name,
-              models: Object.values(p.models).map((m) => ({ id: m.id, name: m.name })),
+              models: Object.values(p.models).map((m) => ({
+                id: m.id,
+                name: m.name,
+                images: Boolean(m.capabilities?.attachment || m.capabilities?.input?.image),
+              })),
             }))
             .filter((p) => p.models.length > 0)
           res.setHeader('Content-Type', 'application/json')

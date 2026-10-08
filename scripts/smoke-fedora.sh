@@ -17,9 +17,8 @@ opencode --version
 # root in a container needs --no-sandbox; a desktop user doesn't
 xvfb-run -a radeon-harness --no-sandbox --remote-debugging-port=9222 > app.log 2>&1 &
 
-for _ in $(seq 1 60); do
-  curl -sf http://127.0.0.1:9222/json > /dev/null && break
-  sleep 1
-done
-
-node scripts/smoke-check.mjs || { echo '--- app log'; cat app.log; exit 1; }
+node scripts/smoke-check.mjs || {
+  echo '--- app output'; cat app.log
+  echo '--- startup log'; cat "$HOME/.config/Radeon Harness/logs/main.log" 2>/dev/null || echo '(none)'
+  exit 1
+}

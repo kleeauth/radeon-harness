@@ -13,7 +13,7 @@
     "url": "https://github.com/kleeauth/radeon-harness.git"
   },
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "main": "electron/main.cjs",
   "desktopName": "radeon-harness.desktop",
