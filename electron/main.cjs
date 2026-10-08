@@ -30,31 +30,47 @@ function freePort() {
   })
 }
 
-function getJson(port, urlPath) {
+// Every request has a deadline: a server that accepts the connection but never answers must not
+// hang startup forever (seen on a fresh Fedora machine).
+function getJson(port, urlPath, timeoutMs = 5000) {
   return new Promise((resolve, reject) => {
-    http
-      .get({ host: '127.0.0.1', port, path: urlPath, headers: { Authorization: basicAuth } }, (res) => {
-        let body = ''
-        res.on('data', (c) => (body += c))
-        res.on('end', () => (res.statusCode === 200 ? resolve(JSON.parse(body)) : reject(new Error(`HTTP ${res.statusCode}`))))
+    const req = http.get({ host: '127.0.0.1', port, path: urlPath, headers: { Authorization: basicAuth } }, (res) => {
+      let body = ''
+      res.on('data', (c) => (body += c))
+      res.on('end', () => {
+        if (res.statusCode !== 200) return reject(new Error(`HTTP ${res.statusCode}`))
+        try {
+          resolve(JSON.parse(body))
+        } catch (err) {
+          reject(err)
+        }
       })
-      .on('error', reject)
+    })
+    req.setTimeout(timeoutMs, () => req.destroy(new Error(`no answer within ${timeoutMs / 1000}s`)))
+    req.on('error', reject)
   })
 }
 
 // opencode's first start on a new machine sets itself up and can take well over 20 seconds
 async function waitForServer(port, timeoutMs = 90000) {
   const started = Date.now()
+  let lastReason = ''
+  let lastLogged = 0
   while (Date.now() - started < timeoutMs) {
     if (opencodeExited) throw new Error(`opencode exited during startup (code ${opencodeExited.code})`)
     try {
       await getJson(port, '/global/health')
       return
-    } catch {
+    } catch (err) {
+      lastReason = err.message
+      if (Date.now() - lastLogged > 5000) {
+        log(`waiting for opencode (${Math.round((Date.now() - started) / 1000)}s): ${lastReason}`)
+        lastLogged = Date.now()
+      }
       await new Promise((r) => setTimeout(r, 300))
     }
   }
-  throw new Error(`opencode did not start within ${timeoutMs / 1000} seconds`)
+  throw new Error(`opencode did not answer within ${timeoutMs / 1000} seconds (last error: ${lastReason})`)
 }
 
 // ---------- startup log ----------

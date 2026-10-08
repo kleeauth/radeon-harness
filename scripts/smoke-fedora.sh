@@ -20,5 +20,6 @@ xvfb-run -a radeon-harness --no-sandbox --remote-debugging-port=9222 > app.log 2
 node scripts/smoke-check.mjs || {
   echo '--- app output'; cat app.log
   echo '--- startup log'; cat "$HOME/.config/Radeon Harness/logs/main.log" 2>/dev/null || echo '(none)'
+  echo '--- opencode logs'; tail -n 80 "$HOME"/.local/share/opencode/log/*.log 2>/dev/null || echo '(none)'
   exit 1
 }

@@ -1,0 +1,34 @@
+name: Fedora opencode probe
+
+# Quick diagnostic: does a fresh opencode on Fedora answer HTTP, and how fast? No app build.
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    container: fedora:latest
+    steps:
+      - name: Install opencode
+        run: |
+          dnf install -y nodejs npm curl procps-ng >/dev/null
+          npm install -g opencode-ai
+          command -v opencode && opencode --version
+
+      - name: Start opencode and time its answers
+        run: |
+          cd "$HOME"
+          OPENCODE_SERVER_PASSWORD=probe opencode serve --port 4999 --hostname 127.0.0.1 > serve.log 2>&1 &
+          start=$(date +%s)
+          for i in $(seq 1 40); do
+            code=$(curl -s -o /tmp/h.json -w '%{http_code}' -m 5 -u opencode:probe http://127.0.0.1:4999/global/health || echo "timeout/err")
+            echo "t+$(( $(date +%s) - start ))s  /global/health -> $code $(cat /tmp/h.json 2>/dev/null)"
+            [ "$code" = "200" ] && break
+            sleep 2
+          done
+          echo "--- unauthenticated:"
+          curl -s -m 5 -o /dev/null -w '%{http_code}\n' http://127.0.0.1:4999/global/health || echo "timeout/err"
+          echo "--- providers:"
+          curl -s -m 20 -u opencode:probe http://127.0.0.1:4999/config/providers | head -c 300; echo
+          echo "--- serve output:"; cat serve.log
+          echo "--- opencode logs:"; ls -la ~/.local/share/opencode/log/ 2>/dev/null && tail -n 60 ~/.local/share/opencode/log/*.log 2>/dev/null || true
