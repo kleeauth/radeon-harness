@@ -44,8 +44,8 @@ while (Date.now() < deadline) {
     title: document.title,
     url: location.protocol,
     platform: document.documentElement.dataset.platform,
-    connected: document.querySelector('.footer-status')?.innerText ?? '',
-    mods: document.querySelector('.mods-btn:last-child')?.innerText ?? '',
+    connected: document.querySelector('.footer-status')?.textContent?.trim() ?? '',
+    mods: document.querySelector('.mods-btn:last-child')?.textContent?.trim() ?? '',
     composer: !!document.querySelector('.composer textarea'),
     statusScreen: document.querySelector('main h1')?.innerText ?? '',
   })`).catch(() => null)

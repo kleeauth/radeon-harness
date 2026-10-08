@@ -15,7 +15,8 @@ npm install -g opencode-ai
 opencode --version
 
 # root in a container needs --no-sandbox; a desktop user doesn't
-xvfb-run -a radeon-harness --no-sandbox --remote-debugging-port=9222 > app.log 2>&1 &
+# a desktop-sized screen: xvfb's default is 640px wide, which puts the app in its narrow layout
+xvfb-run -a -s "-screen 0 1600x1000x24" radeon-harness --no-sandbox --remote-debugging-port=9222 > app.log 2>&1 &
 
 node scripts/smoke-check.mjs || {
   echo '--- app output'; cat app.log
