@@ -28,6 +28,8 @@ Grab the latest build from [Releases](https://github.com/cloverscripts/radeon-ha
 
 The builds aren't code-signed yet, so Windows SmartScreen may warn on first launch: choose **More info → Run anyway**.
 
+**Fedora:** install the `.rpm` with `sudo dnf install ./Radeon-Harness-*.rpm`, then start **Radeon Harness** from the app grid or run `radeon-harness`. Install opencode first (`curl -fsSL https://opencode.ai/install | bash` or `npm install -g opencode-ai`). Every release is installed and launched on Fedora in CI before it's published.
+
 On Ubuntu 24.04 and newer, AppImages can fail to start because of a sandbox restriction. Use the `.deb` there, or start the AppImage with `--no-sandbox`. Older AppImage setups also need FUSE (`sudo apt install libfuse2`).
 
 Windows 7 and 8.1 aren't supported: the Electron runtime this app is built on requires Windows 10 or newer.

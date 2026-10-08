@@ -16,6 +16,7 @@
   "version": "0.1.0",
   "type": "module",
   "main": "electron/main.cjs",
+  "desktopName": "radeon-harness.desktop",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
@@ -63,6 +64,15 @@
     },
     "linux": {
       "icon": "build/icon.png",
+      "executableName": "radeon-harness",
+      "desktop": {
+        "entry": {
+          "Name": "Radeon Harness",
+          "Comment": "Codex-style desktop app for opencode",
+          "StartupWMClass": "radeon-harness",
+          "Keywords": "opencode;ai;agent;chat;code;"
+        }
+      },
       "category": "Development",
       "synopsis": "Codex-style desktop app for opencode",
       "maintainer": "cloverscripts <272895609+cloverscripts@users.noreply.github.com>",

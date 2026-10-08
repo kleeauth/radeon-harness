@@ -1,7 +1,8 @@
 name: Release
 
-# Push a tag like v0.1.0 to build every installer and attach them to a GitHub Release.
-# Run it by hand from the Actions tab to get the builds as downloadable artifacts instead.
+# Every run: build all installers, then install the .rpm on Fedora and launch it.
+# On a v* tag, and only if that test passes, the installers are published as a GitHub Release.
+# Run it by hand from the Actions tab to get the builds as downloadable artifacts.
 on:
   push:
     tags: ['v*']
@@ -36,11 +37,7 @@ jobs:
 
       - run: npm ci
       - run: npm run build
-
-      - name: Package
-        run: npx electron-builder ${{ matrix.target }} --publish ${{ startsWith(github.ref, 'refs/tags/') && 'always' || 'never' }}
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - run: npx electron-builder ${{ matrix.target }} --publish never
 
       - uses: actions/upload-artifact@v4
         with:
@@ -52,3 +49,35 @@ jobs:
             release/*.deb
             release/*.rpm
             release/*.tar.gz
+
+  fedora:
+    name: Fedora install + launch test
+    needs: build
+    runs-on: ubuntu-latest
+    container: fedora:latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: radeon-harness-Linux
+          path: release
+      - run: bash scripts/smoke-fedora.sh
+
+  publish:
+    needs: [build, fedora]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release
+          merge-multiple: true
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ls -la release
+          gh release create "${GITHUB_REF_NAME}" release/* \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "Radeon Harness ${GITHUB_REF_NAME}" \
+            --generate-notes

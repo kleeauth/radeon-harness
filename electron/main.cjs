@@ -558,9 +558,11 @@ function createWindow() {
     icon: windowIcon(),
     backgroundColor: '#0e0e10',
     show: false,
-    // frameless with native window buttons drawn over the top bar
-    titleBarStyle: 'hidden',
-    titleBarOverlay: { color: '#00000000', symbolColor: '#b4b4ba', height: 40 },
+    // Windows: frameless with native window buttons drawn over the top bar. Linux keeps the
+    // system title bar: on GNOME/Wayland a hidden frame can leave the window without controls.
+    ...(isWindows
+      ? { titleBarStyle: 'hidden', titleBarOverlay: { color: '#00000000', symbolColor: '#b4b4ba', height: 40 } }
+      : {}),
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),

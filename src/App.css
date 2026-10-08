@@ -258,6 +258,11 @@
   border-bottom: 1px solid var(--border);
 }
 
+/* only Windows draws window buttons over the top bar */
+:root:not([data-platform='win32']) .topbar {
+  padding-right: 20px;
+}
+
 .topbar-title {
   display: flex;
   align-items: center;
