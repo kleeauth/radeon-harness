@@ -3,6 +3,7 @@ import type { ModelRef, ProviderOption } from '../lib/opencode'
 import { imagesFrom, MAX_IMAGES, type ImageAttachment } from '../lib/images'
 import { AlertIcon, ArrowUpIcon, ImageIcon, SparkleIcon, StopIcon, XIcon } from './Icons'
 import { ModelPicker } from './ModelPicker'
+import { ThinkingPicker } from './ThinkingPicker'
 
 export type SlashCommand = { name: string; description: string; source: string }
 
@@ -21,6 +22,8 @@ type Props = {
   images: ImageAttachment[]
   onAddImages: (files: File[]) => void
   onRemoveImage: (id: string) => void
+  thinking: string | null
+  onThinkingChange: (variant: string | null) => void
   placeholder?: string
 }
 
@@ -40,6 +43,8 @@ export function Composer(props: Props) {
     images,
     onAddImages,
     onRemoveImage,
+    thinking,
+    onThinkingChange,
   } = props
   const ref = useRef<HTMLTextAreaElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -73,11 +78,12 @@ export function Composer(props: Props) {
     if (slashQuery === undefined) setDismissed(false)
   }, [slashQuery])
 
-  const modelSeesImages = useMemo(() => {
-    if (!model) return true
-    const m = providers.find((p) => p.id === model.providerID)?.models.find((x) => x.id === model.modelID)
-    return m?.images ?? true
+  const currentModel = useMemo(() => {
+    if (!model) return undefined
+    return providers.find((p) => p.id === model.providerID)?.models.find((x) => x.id === model.modelID)
   }, [providers, model])
+  const modelSeesImages = currentModel?.images ?? true
+  const levels = currentModel?.variants ?? []
 
   const complete = (name: string) => {
     onChange(`/${name} `)
@@ -214,6 +220,7 @@ export function Composer(props: Props) {
           <ImageIcon size={17} />
         </button>
         <ModelPicker providers={providers} value={model} onChange={onModelChange} />
+        {levels.length > 0 && <ThinkingPicker variants={levels} value={thinking} onChange={onThinkingChange} />}
         <button
           type="button"
           className={intelligent ? 'chip toggle on' : 'chip toggle'}

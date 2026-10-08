@@ -31,7 +31,8 @@ export type ProviderOption = {
   id: string
   name: string
   // images: the model accepts picture attachments
-  models: Array<{ id: string; name: string; images?: boolean }>
+  // variants: thinking levels the model offers, e.g. low, medium, high, xhigh, max
+  models: Array<{ id: string; name: string; images?: boolean; variants?: string[] }>
 }
 
 export type ProviderCatalog = {

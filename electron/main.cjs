@@ -237,7 +237,13 @@ async function handleProviders(res) {
     .map((p) => ({
       id: p.id,
       name: p.name,
-      models: Object.values(p.models).map((m) => ({ id: m.id, name: m.name, images: acceptsImages(m) })),
+      models: Object.values(p.models).map((m) => ({
+        id: m.id,
+        name: m.name,
+        images: acceptsImages(m),
+        // thinking levels the model offers (low … max); empty when it has none
+        variants: m.variants ? Object.keys(m.variants) : [],
+      })),
     }))
     .filter((p) => p.models.length > 0)
   res.writeHead(200, { 'Content-Type': 'application/json' })

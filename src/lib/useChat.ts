@@ -99,14 +99,22 @@ export function useChat() {
 
   // Fire and forget: the reply arrives through the event stream.
   const send = useCallback(
-    async (sessionID: string, text: string, model: ModelRef | null, system?: string, images: ImageAttachment[] = []) => {
+    async (
+      sessionID: string,
+      text: string,
+      model: ModelRef | null,
+      system?: string,
+      images: ImageAttachment[] = [],
+      variant?: string | null,
+    ) => {
       const parts = [
         ...images.map((img) => ({ type: 'file' as const, mime: img.mime, filename: img.name, url: img.dataUrl })),
         ...(text ? [{ type: 'text' as const, text }] : []),
       ]
       const res = await client.session.promptAsync({
         path: { id: sessionID },
-        body: { model: model ?? undefined, system: system || undefined, parts },
+        // `variant` is the thinking level; the bundled SDK's types predate it, the server accepts it
+        body: { model: model ?? undefined, system: system || undefined, parts, ...(variant ? { variant } : {}) } as never,
       })
       if (res.error) throw new Error(JSON.stringify(res.error))
     },

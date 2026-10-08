@@ -175,6 +175,19 @@
   text-overflow: ellipsis;
 }
 
+.chip.thinking.on {
+  color: var(--text);
+  border-color: var(--border-strong);
+  background: var(--surface-2);
+}
+
+.thinking-popover {
+  width: 280px;
+}
+.thinking-popover .popover-group {
+  padding: 10px 12px 2px;
+}
+
 /* opens upward from the composer */
 .popover {
   position: absolute;

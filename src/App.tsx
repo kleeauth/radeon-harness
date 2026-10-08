@@ -27,6 +27,7 @@ import './App.css'
 const MODEL_KEY = 'radeon-harness.model'
 const INTELLIGENT_KEY = 'radeon-harness.intelligent-ui'
 const SIDEBAR_KEY = 'radeon-harness.sidebar-open'
+const THINKING_KEY = 'radeon-harness.thinking'
 const NARROW_QUERY = '(max-width: 760px)'
 
 function readPref<T>(key: string, fallback: T): T {
@@ -64,6 +65,8 @@ export default function App() {
   const [intelligent, setIntelligent] = useState(() => readPref(INTELLIGENT_KEY, true))
   const [draft, setDraft] = useState('')
   const [images, setImages] = useState<ImageAttachment[]>([])
+  // thinking level per model ("provider/model" -> variant), remembered across launches
+  const [thinkingByModel, setThinkingByModel] = useState<Record<string, string>>(() => readPref(THINKING_KEY, {}))
   const [error, setError] = useState<string | null>(null)
   const [modsOpen, setModsOpen] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<{ kind: 'one'; session: Session } | { kind: 'all' } | null>(null)
@@ -118,6 +121,20 @@ export default function App() {
   }, [model])
 
   useEffect(() => writePref(INTELLIGENT_KEY, intelligent), [intelligent])
+  useEffect(() => writePref(THINKING_KEY, thinkingByModel), [thinkingByModel])
+
+  // the level only applies if this model still offers it
+  const modelKey = model ? `${model.providerID}/${model.modelID}` : ''
+  const modelLevels =
+    providers.find((p) => p.id === model?.providerID)?.models.find((m) => m.id === model?.modelID)?.variants ?? []
+  const thinking = modelLevels.includes(thinkingByModel[modelKey]) ? thinkingByModel[modelKey] : null
+  const setThinking = (variant: string | null) =>
+    setThinkingByModel((all) => {
+      const next = { ...all }
+      if (variant) next[modelKey] = variant
+      else delete next[modelKey]
+      return next
+    })
 
   const newThread = useCallback(() => {
     setActiveID(null)
@@ -179,7 +196,7 @@ export default function App() {
     const id = await ensureThread()
     const result = await mods.dispatch('prompt.submit', { sessionID: id, text })
     if (!result) return
-    await chat.send(id, result.text, model, intelligent ? INTELLIGENT_UI_PROMPT : undefined, withImages)
+    await chat.send(id, result.text, model, intelligent ? INTELLIGENT_UI_PROMPT : undefined, withImages, thinking)
   }
 
   const addImages = async (files: File[]) => {
@@ -299,6 +316,8 @@ export default function App() {
         images={images}
         onAddImages={(files) => void addImages(files)}
         onRemoveImage={(id) => setImages((list) => list.filter((img) => img.id !== id))}
+        thinking={thinking}
+        onThinkingChange={setThinking}
       />
       <ModStatusLine />
     </>

@@ -24,7 +24,12 @@ export default defineConfig(({ mode }) => {
               name: string
               models: Record<
                 string,
-                { id: string; name: string; capabilities?: { attachment?: boolean; input?: { image?: boolean } } }
+                {
+                  id: string
+                  name: string
+                  capabilities?: { attachment?: boolean; input?: { image?: boolean } }
+                  variants?: Record<string, unknown>
+                }
               >
             }>
             default?: Record<string, string>
@@ -37,6 +42,7 @@ export default defineConfig(({ mode }) => {
                 id: m.id,
                 name: m.name,
                 images: Boolean(m.capabilities?.attachment || m.capabilities?.input?.image),
+                variants: m.variants ? Object.keys(m.variants) : [],
               })),
             }))
             .filter((p) => p.models.length > 0)
