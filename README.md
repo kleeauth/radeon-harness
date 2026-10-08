@@ -15,7 +15,7 @@ Radeon Harness launches opencode itself, so there is no terminal step. Every mod
 
 ## Download
 
-Grab the latest build from [Releases](https://github.com/cloverscripts/radeon-harness/releases).
+Grab the latest build from [Releases](https://github.com/kleeauth/radeon-harness/releases).
 
 | Platform | File | Notes |
 | --- | --- | --- |
@@ -46,7 +46,7 @@ opencode works inside one folder, shown at the top of the sidebar. It starts as 
 ## Run from source
 
 ```bash
-git clone https://github.com/cloverscripts/radeon-harness.git
+git clone https://github.com/kleeauth/radeon-harness.git
 cd radeon-harness
 npm install
 npm run app

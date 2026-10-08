@@ -609,7 +609,7 @@ ipcMain.handle('app:choose-workspace', async (event) => {
 
 // Windows groups taskbar buttons and names the jump list by this id. It must match build.appId in
 // package.json, which the installer stamps on the Start menu and desktop shortcuts.
-const APP_ID = 'io.github.cloverscripts.radeonharness'
+const APP_ID = 'io.github.kleeauth.radeonharness'
 app.setName('Radeon Harness')
 if (isWindows) app.setAppUserModelId(APP_ID)
 

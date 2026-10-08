@@ -4,13 +4,13 @@
   "description": "A Codex-style desktop app for opencode, with interactive widgets and mods",
   "license": "MIT",
   "author": {
-    "name": "cloverscripts",
-    "email": "272895609+cloverscripts@users.noreply.github.com"
+    "name": "kleeauth",
+    "email": "326063774+kleeauth@users.noreply.github.com"
   },
-  "homepage": "https://github.com/cloverscripts/radeon-harness",
+  "homepage": "https://github.com/kleeauth/radeon-harness",
   "repository": {
     "type": "git",
-    "url": "https://github.com/cloverscripts/radeon-harness.git"
+    "url": "https://github.com/kleeauth/radeon-harness.git"
   },
   "private": true,
   "version": "0.1.0",
@@ -28,11 +28,11 @@
     "preview": "vite preview"
   },
   "build": {
-    "appId": "io.github.cloverscripts.radeonharness",
+    "appId": "io.github.kleeauth.radeonharness",
     "productName": "Radeon Harness",
     "artifactName": "Radeon-Harness-${version}-${os}-${arch}.${ext}",
     "publish": [
-      { "provider": "github", "owner": "cloverscripts", "repo": "radeon-harness", "releaseType": "release" }
+      { "provider": "github", "owner": "kleeauth", "repo": "radeon-harness", "releaseType": "release" }
     ],
     "directories": {
       "output": "release",
@@ -75,7 +75,7 @@
       },
       "category": "Development",
       "synopsis": "Codex-style desktop app for opencode",
-      "maintainer": "cloverscripts <272895609+cloverscripts@users.noreply.github.com>",
+      "maintainer": "kleeauth <326063774+kleeauth@users.noreply.github.com>",
       "target": [
         { "target": "AppImage", "arch": ["x64", "arm64"] },
         { "target": "deb", "arch": ["x64", "arm64"] },
