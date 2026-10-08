@@ -19,7 +19,7 @@ Grab the latest build from [Releases](https://github.com/kleeauth/radeon-harness
 
 | Platform | File | Notes |
 | --- | --- | --- |
-| Windows 10 / 11 (x64, ARM64, 32-bit) | `Radeon-Harness-…-setup-<arch>.exe` | Installer. Per-user, no admin rights needed. |
+| Windows 10 / 11 (x64, ARM64) | `Radeon-Harness-…-setup-<arch>.exe` | Installer. Per-user, no admin rights needed. |
 | Windows, no install | `Radeon-Harness-…-portable-x64.exe` | Runs from anywhere, e.g. a USB stick. |
 | Linux, any distro (x64, ARM64) | `Radeon-Harness-…-linux-<arch>.AppImage` | `chmod +x` it and run. |
 | Debian, Ubuntu, Mint, Pop!_OS | `.deb` | `sudo apt install ./Radeon-Harness-….deb` |

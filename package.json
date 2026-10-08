@@ -47,7 +47,7 @@
     "win": {
       "icon": "build/icon.png",
       "target": [
-        { "target": "nsis", "arch": ["x64", "arm64", "ia32"] },
+        { "target": "nsis", "arch": ["x64", "arm64"] },
         { "target": "portable", "arch": ["x64"] }
       ]
     },
