@@ -296,6 +296,13 @@
   color: var(--text-2);
 }
 
+.mod-network {
+  margin-top: 6px;
+  font: 11.5px var(--mono);
+  color: var(--ok);
+  overflow-wrap: anywhere;
+}
+
 .mod-error {
   margin-top: 6px;
   font: 12px var(--mono);

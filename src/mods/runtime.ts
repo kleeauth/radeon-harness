@@ -9,6 +9,8 @@ import type {
   ModEvents,
   ModInfo,
   ModModule,
+  NetRequest,
+  NetResponse,
 } from './types'
 
 type Loaded = { info: ModInfo; enabled: boolean; error?: string }
@@ -21,6 +23,7 @@ export type ModSnapshot = {
   bands: Array<{ mod: string; spec: NonNullable<BandSpec> }>
   toasts: Toast[]
   commands: Array<{ mod: string; spec: CommandSpec }>
+  network: Record<string, string[]>
 }
 
 const DISABLED_KEY = 'radeon-harness.mods.disabled'
@@ -50,8 +53,10 @@ class ModRuntime {
   private bands = new Map<string, NonNullable<BandSpec>>()
   private toasts: Toast[] = []
   private commands = new Map<string, { mod: string; spec: CommandSpec }>()
+  // hosts each mod has contacted this session, shown in the Mods panel
+  private network = new Map<string, Set<string>>()
   private listeners = new Set<() => void>()
-  private snapshot: ModSnapshot = { mods: [], statuses: [], bands: [], toasts: [], commands: [] }
+  private snapshot: ModSnapshot = { mods: [], statuses: [], bands: [], toasts: [], commands: [], network: {} }
   private toastSeq = 0
   private token = ''
   activeSession: () => string | null = () => null
@@ -70,6 +75,7 @@ class ModRuntime {
       bands: [...this.bands].map(([mod, spec]) => ({ mod, spec })),
       toasts: [...this.toasts],
       commands: [...this.commands.values()],
+      network: Object.fromEntries([...this.network].map(([mod, hosts]) => [mod, [...hosts]])),
     }
     this.listeners.forEach((fn) => fn())
   }
@@ -84,9 +90,71 @@ class ModRuntime {
     }, 4200)
   }
 
+  private noteHost(mod: string, url: string) {
+    try {
+      const host = new URL(url).hostname
+      const seen = this.network.get(mod) ?? new Set<string>()
+      if (seen.has(host)) return
+      this.network.set(mod, seen.add(host))
+      this.changed()
+    } catch {
+      // invalid URL: the broker reports it
+    }
+  }
+
+  private async netFetch(mod: string, url: string, init: NetRequest = {}): Promise<NetResponse> {
+    const headers = { ...(init.headers ?? {}) }
+    let body: string | undefined
+    let bodyEncoding: 'utf8' | 'base64' = 'utf8'
+    if (init.body instanceof ArrayBuffer || ArrayBuffer.isView(init.body)) {
+      const view = init.body
+      const bytes =
+        view instanceof ArrayBuffer ? new Uint8Array(view) : new Uint8Array(view.buffer, view.byteOffset, view.byteLength)
+      body = btoa(Array.from(bytes, (b) => String.fromCharCode(b)).join(''))
+      bodyEncoding = 'base64'
+    } else if (typeof init.body === 'string') {
+      body = init.body
+    } else if (init.body !== undefined) {
+      body = JSON.stringify(init.body)
+      if (!Object.keys(headers).some((h) => h.toLowerCase() === 'content-type')) headers['Content-Type'] = 'application/json'
+    }
+
+    const res = await fetch('/api/mod-fetch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-app-token': this.token },
+      body: JSON.stringify({ url, method: init.method ?? 'GET', headers, body, bodyEncoding }),
+    })
+    const r = (await res.json()) as {
+      ok: boolean
+      status: number
+      url?: string
+      headers?: Record<string, string>
+      encoding?: 'utf8' | 'base64'
+      body?: string
+      error?: string
+    }
+    if (!r.status) throw new Error(r.error ?? 'request failed')
+    // only hosts that were actually reached, not ones the broker refused
+    this.noteHost(mod, url)
+    const text = () =>
+      r.encoding === 'base64'
+        ? new TextDecoder().decode(Uint8Array.from(atob(r.body ?? ''), (c) => c.charCodeAt(0)))
+        : (r.body ?? '')
+    const lower = Object.fromEntries(Object.entries(r.headers ?? {}).map(([k, v]) => [k.toLowerCase(), v]))
+    return {
+      ok: r.ok,
+      status: r.status,
+      url: r.url ?? url,
+      headers: { get: (name) => lower[name.toLowerCase()] ?? null },
+      text: async () => text(),
+      json: async () => JSON.parse(text()),
+    }
+  }
+
   private api(mod: string): ModApi {
     return {
       mod,
+      net: { fetch: (url, init) => this.netFetch(mod, url, init) },
       ui: {
         status: (text) => {
           if (text) this.statuses.set(mod, text)

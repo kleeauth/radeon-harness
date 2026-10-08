@@ -46,7 +46,7 @@ export function ModToasts() {
 }
 
 export function ModsPanel({ onClose }: { onClose: () => void }) {
-  const { mods: list, commands } = useMods()
+  const { mods: list, commands, network } = useMods()
   const [reloading, setReloading] = useState(false)
 
   useEffect(() => {
@@ -107,6 +107,11 @@ export function ModsPanel({ onClose }: { onClose: () => void }) {
                       ))}
                     </div>
                   )}
+                  {network[m.info.name]?.length > 0 && (
+                    <div className="mod-network" title="Sites this mod has contacted since the app started">
+                      Internet: {network[m.info.name].join(', ')}
+                    </div>
+                  )}
                   {m.error && <div className="mod-error">{m.error}</div>}
                 </div>
                 <button
@@ -128,7 +133,7 @@ export function ModsPanel({ onClose }: { onClose: () => void }) {
           A mod is a folder with <code>mod.js</code> exporting <code>register(on, $)</code>. Hooks: <code>prompt.submit</code>,{' '}
           <code>turn.start</code>, <code>turn.end</code>, <code>tool.result</code>, <code>message.complete</code>,{' '}
           <code>session.start</code>. UI: <code>$.ui.status</code>, <code>$.ui.toast</code>, <code>$.ui.band</code>,{' '}
-          <code>$.command.register</code>.
+          <code>$.command.register</code>. Internet: <code>$.net.fetch</code>.
         </footer>
       </div>
     </div>

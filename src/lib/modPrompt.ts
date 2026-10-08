@@ -39,6 +39,7 @@ Return nothing to let the event continue unchanged, return null to swallow it, o
 - $.command.register({ name, description, run: (args, $) => result }): add a slash command; run may return { prompt: '...' } to send a prompt to the model, { text: '...' } to show a note, or nothing
 - $.state.get(key, fallback) / $.state.set(key, value): persistent storage for this mod, JSON values only
 - $.activeSession(): the id of the thread on screen, or null
+- await $.net.fetch(url, { method, headers, body }): internet access, works like fetch and returns { ok, status, headers.get(name), text(), json() }. HTTPS only, public internet only (no localhost or local network), 30s timeout, 5 MB responses. A non-string body is sent as JSON. The normal fetch() is blocked, so always use $.net.fetch. Good keyless APIs: Open-Meteo (weather), CoinGecko (crypto), Frankfurter (currency), Wikipedia REST, GitHub, Hacker News.
 - setTimeout / setInterval are available for timers
 
 ## Example

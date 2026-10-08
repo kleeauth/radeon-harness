@@ -117,6 +117,7 @@ export function register(on, $) {
 | `$.command.register({ name, description, run })` | Add a slash command. `run` may return `{ prompt }` to send a prompt or `{ text }` to show a note. |
 | `$.state.get(key, fallback)` / `$.state.set(key, value)` | Persistent per-mod storage. |
 | `$.activeSession()` | The id of the thread on screen, if any. |
+| `await $.net.fetch(url, { method, headers, body })` | Internet access, shaped like `fetch`: returns `{ ok, status, headers.get(), text(), json() }`. HTTPS to the public internet only (no localhost or local network), 30 s timeout, 5 MB responses. Non-string bodies are sent as JSON. The Mods panel lists the sites each mod has contacted. |
 
 Events: `session.start`, `prompt.submit`, `turn.start`, `turn.end`, `tool.result`, `message.complete`. Their shapes are in [`src/mods/types.ts`](src/mods/types.ts).
 

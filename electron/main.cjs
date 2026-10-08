@@ -265,7 +265,8 @@ async function assertPublicUrl(raw) {
   return url
 }
 
-async function readCapped(res) {
+async function readCapped(res, maxBytes = FETCH_MAX_BYTES) {
+  if (!res.body) return Buffer.alloc(0)
   const reader = res.body.getReader()
   const chunks = []
   let total = 0
@@ -273,48 +274,108 @@ async function readCapped(res) {
     const { done, value } = await reader.read()
     if (done) break
     total += value.byteLength
-    if (total > FETCH_MAX_BYTES) {
+    if (total > maxBytes) {
       await reader.cancel()
-      throw new Error('response larger than 2 MB')
+      throw new Error(`response larger than ${Math.round(maxBytes / 1048576)} MB`)
     }
     chunks.push(value)
   }
   return Buffer.concat(chunks)
 }
 
+// headers a caller may not set: the broker owns cookies, routing and framing
+const BLOCKED_HEADERS = /^(cookie|cookie2|host|connection|content-length|transfer-encoding|keep-alive|upgrade|te|trailer|expect|proxy-.*|sec-.*)$/i
+const ALLOWED_METHODS = ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE']
+
 // text stays text; images and other binary content travel as base64
 function isTextual(contentType) {
   return /^text\/|json|xml|javascript|csv|svg/.test(contentType) || contentType === ''
 }
 
-async function brokeredFetch(rawUrl) {
+// Widgets use this as plain GET; mods may also send other methods, headers and a body.
+// Either way: https only, public addresses only (re-checked on every redirect), no cookies.
+async function brokeredFetch(rawUrl, opts = {}) {
+  const {
+    method: rawMethod = 'GET',
+    headers: rawHeaders = {},
+    body: rawBody,
+    bodyEncoding = 'utf8',
+    timeoutMs = FETCH_TIMEOUT_MS,
+    maxBytes = FETCH_MAX_BYTES,
+    userAgent = 'RadeonHarness/0.1 (+widget live data)',
+  } = opts
+  let method = String(rawMethod).toUpperCase()
+  if (!ALLOWED_METHODS.includes(method)) throw new Error(`method ${method} is not allowed`)
+  const headers = { 'User-Agent': userAgent, Accept: 'application/json, text/plain, */*' }
+  for (const [k, v] of Object.entries(rawHeaders || {})) {
+    if (!BLOCKED_HEADERS.test(k)) headers[k] = String(v)
+  }
+  let body = rawBody == null || method === 'GET' || method === 'HEAD' ? undefined : Buffer.from(String(rawBody), bodyEncoding)
+
   let url = await assertPublicUrl(rawUrl)
   for (let hop = 0; hop <= FETCH_MAX_REDIRECTS; hop++) {
     const res = await fetch(url, {
-      method: 'GET',
+      method,
+      headers,
+      body,
       redirect: 'manual',
       credentials: 'omit',
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-      headers: { 'User-Agent': 'RadeonHarness/0.1 (+widget live data)', Accept: 'application/json, text/plain, */*' },
+      signal: AbortSignal.timeout(timeoutMs),
     })
     const location = res.headers.get('location')
     if (res.status >= 300 && res.status < 400 && location) {
       url = await assertPublicUrl(new URL(location, url).toString()) // every hop is re-checked
+      // like browsers: 307/308 keep method and body, the others continue as GET
+      if (res.status !== 307 && res.status !== 308) {
+        method = 'GET'
+        body = undefined
+      }
       continue
     }
     const contentType = res.headers.get('content-type') || ''
-    const bytes = await readCapped(res)
+    const bytes = await readCapped(res, maxBytes)
     const textual = isTextual(contentType)
     return {
       ok: res.ok,
       status: res.status,
       url: url.toString(),
       contentType,
+      headers: Object.fromEntries(res.headers.entries()),
       encoding: textual ? 'utf8' : 'base64',
       body: bytes.toString(textual ? 'utf8' : 'base64'),
     }
   }
   throw new Error('too many redirects')
+}
+
+// mods: trusted code the user installed, so methods, headers and bodies are allowed; larger limits
+function handleModFetch(req, res) {
+  const chunks = []
+  let size = 0
+  req.on('data', (c) => {
+    size += c.length
+    if (size > 8 * 1024 * 1024) req.destroy()
+    else chunks.push(c)
+  })
+  req.on('end', async () => {
+    let out
+    try {
+      const { url, method, headers, body, bodyEncoding } = JSON.parse(Buffer.concat(chunks).toString('utf8'))
+      out = await brokeredFetch(String(url), {
+        method,
+        headers,
+        body,
+        bodyEncoding: bodyEncoding === 'base64' ? 'base64' : 'utf8',
+        timeoutMs: 30000,
+        maxBytes: 5 * 1024 * 1024,
+        userAgent: 'RadeonHarness/0.1 (+mod)',
+      })
+    } catch (err) {
+      out = { ok: false, status: 0, error: err && err.name === 'TimeoutError' ? 'request timed out' : String(err.message || err) }
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify(out))
+  })
 }
 
 function handleWidgetFetch(req, res) {
@@ -571,6 +632,7 @@ function startGateway() {
         })
       }
       if (url === '/api/widget-fetch' && req.method === 'POST') return handleWidgetFetch(req, res)
+      if (url === '/api/mod-fetch' && req.method === 'POST') return handleModFetch(req, res)
       if (url === '/api/mods') {
         res.writeHead(200, { 'Content-Type': 'application/json' })
         return res.end(JSON.stringify({ mods: listMods() }))

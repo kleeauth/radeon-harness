@@ -28,8 +28,26 @@ export type CommandResult = { prompt?: string; text?: string }
 
 export type BandSpec = { text: string; tone?: 'info' | 'warn' | 'accent' } | null
 
+export type NetRequest = {
+  method?: 'GET' | 'HEAD' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
+  headers?: Record<string, string>
+  // a string is sent as-is; anything else is sent as JSON with a JSON content type
+  body?: unknown
+}
+
+export type NetResponse = {
+  ok: boolean
+  status: number
+  url: string
+  headers: { get: (name: string) => string | null }
+  text: () => Promise<string>
+  json: () => Promise<unknown>
+}
+
 export type ModApi = {
   mod: string
+  // HTTPS requests to the public internet, made by the app on the mod's behalf
+  net: { fetch: (url: string, init?: NetRequest) => Promise<NetResponse> }
   ui: {
     status: (text: string | undefined) => void
     toast: (text: string) => void
