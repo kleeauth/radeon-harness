@@ -555,6 +555,7 @@ function createWindow() {
     minWidth: 760,
     minHeight: 520,
     title: 'Radeon Harness',
+    icon: windowIcon(),
     backgroundColor: '#0e0e10',
     show: false,
     // frameless with native window buttons drawn over the top bar
@@ -603,6 +604,18 @@ ipcMain.handle('app:choose-workspace', async (event) => {
   app.quit()
   return true
 })
+
+// Windows groups taskbar buttons and names the jump list by this id. It must match build.appId in
+// package.json, which the installer stamps on the Start menu and desktop shortcuts.
+const APP_ID = 'io.github.cloverscripts.radeonharness'
+app.setName('Radeon Harness')
+if (isWindows) app.setAppUserModelId(APP_ID)
+
+// packaged builds carry the icon in the exe; dev runs (`electron .`) need it on the window
+function windowIcon() {
+  const icon = path.join(__dirname, '..', 'build', 'icon.png')
+  return !app.isPackaged && fs.existsSync(icon) ? icon : undefined
+}
 
 // One app at a time: a second launch focuses the existing window instead of starting another opencode.
 if (!app.requestSingleInstanceLock()) {
