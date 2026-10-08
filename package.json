@@ -59,6 +59,9 @@
       "createStartMenuShortcut": true,
       "artifactName": "Radeon-Harness-${version}-setup-${arch}.${ext}"
     },
+    "rpm": {
+      "fpm": ["--rpm-rpmbuild-define", "_build_id_links none"]
+    },
     "portable": {
       "artifactName": "Radeon-Harness-${version}-portable-${arch}.${ext}"
     },
