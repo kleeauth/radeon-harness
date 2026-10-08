@@ -44,6 +44,38 @@
   min-width: 0;
 }
 
+.msg-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 13px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 95, 86, 0.35);
+  background: rgba(255, 95, 86, 0.06);
+}
+.msg-error > svg {
+  color: var(--danger);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.msg-error-body {
+  flex: 1;
+  min-width: 0;
+}
+.msg-error-title {
+  font-weight: 600;
+  font-size: 13.5px;
+}
+.msg-error-detail {
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--text-2);
+  overflow-wrap: anywhere;
+}
+.msg-error .btn {
+  flex-shrink: 0;
+}
+
 .thinking-row {
   display: flex;
   align-items: center;
@@ -367,32 +399,23 @@
   border-radius: 0;
 }
 
+/* a quiet row under the widget: its source and a code toggle, never on top of the widget itself */
 .widget-tools {
-  position: absolute;
-  top: -10px;
-  right: 0;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 3px 4px 3px 6px;
-  border-radius: 99px;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 6px;
+  min-height: 22px;
   font-size: 11px;
+}
+.widget-tools button {
   opacity: 0;
-  transform: translateY(2px);
-  transition: opacity 0.15s, transform 0.15s;
-  z-index: 2;
+  transition: opacity 0.15s;
 }
-.widget.seamless:hover .widget-tools,
-.widget-tools:focus-within {
+.widget.seamless:hover .widget-tools button,
+.widget-tools button:focus-visible {
   opacity: 1;
-  transform: none;
-}
-/* a live widget always shows where its data comes from */
-.widget-tools:has(.widget-live) {
-  opacity: 1;
-  transform: none;
 }
 .widget-tools button {
   font-size: 11px;
@@ -412,6 +435,32 @@
   border: 1px solid rgba(245, 165, 36, 0.3);
   border-radius: 10px;
   margin-bottom: 8px;
+}
+
+.widget-error {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 8px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 95, 86, 0.35);
+  background: rgba(255, 95, 86, 0.06);
+  font-size: 13px;
+  color: var(--text-2);
+}
+.widget-error svg {
+  color: var(--danger);
+  flex-shrink: 0;
+}
+.widget-error-text {
+  flex: 1;
+  min-width: 200px;
+}
+.widget-error code {
+  font: 12px var(--mono);
+  color: var(--text);
 }
 
 .widget.seamless .widget-code {

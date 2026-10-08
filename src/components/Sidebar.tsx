@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { Session } from '@opencode-ai/sdk'
 import { displayTitle } from '../lib/opencode'
-import { FolderIcon, LogoMark, PlusIcon, PuzzleIcon, SearchIcon, SidebarIcon } from './Icons'
+import { FolderIcon, LogoMark, PlusIcon, PuzzleIcon, SearchIcon, SidebarIcon, TrashIcon } from './Icons'
 
 // last path segment, for both C:\Users\me\project and /home/me/project
 function folderName(p: string) {
@@ -18,6 +18,8 @@ type Props = {
   onNew: () => void
   onOpenMods: () => void
   onCollapse: () => void
+  onDeleteThread: (s: Session) => void
+  onDeleteAll: () => void
 }
 
 const DAY = 24 * 60 * 60 * 1000
@@ -42,7 +44,19 @@ function relative(ts: number, now: number): string {
   return d < 30 ? `${d}d` : new Date(ts).toLocaleDateString()
 }
 
-export function Sidebar({ sessions, activeID, busy, connected, modCount, onSelect, onNew, onOpenMods, onCollapse }: Props) {
+export function Sidebar({
+  sessions,
+  activeID,
+  busy,
+  connected,
+  modCount,
+  onSelect,
+  onNew,
+  onOpenMods,
+  onCollapse,
+  onDeleteThread,
+  onDeleteAll,
+}: Props) {
   const [query, setQuery] = useState('')
 
   const groups = useMemo(() => {
@@ -104,16 +118,22 @@ export function Sidebar({ sessions, activeID, busy, connected, modCount, onSelec
           <div key={label} className="thread-group">
             <div className="thread-group-label">{label}</div>
             {list.map((s) => (
-              <button
-                key={s.id}
-                type="button"
-                className={s.id === activeID ? 'thread active' : 'thread'}
-                onClick={() => onSelect(s.id)}
-              >
-                {busy[s.id] && <span className="thread-busy" aria-label="running" />}
-                <span className="thread-title">{displayTitle(s.title)}</span>
-                <span className="thread-time">{relative(s.time.updated, groups.now)}</span>
-              </button>
+              <div key={s.id} className={s.id === activeID ? 'thread active' : 'thread'}>
+                <button type="button" className="thread-main" onClick={() => onSelect(s.id)}>
+                  {busy[s.id] && <span className="thread-busy" aria-label="running" />}
+                  <span className="thread-title">{displayTitle(s.title)}</span>
+                  <span className="thread-time">{relative(s.time.updated, groups.now)}</span>
+                </button>
+                <button
+                  type="button"
+                  className="thread-delete"
+                  onClick={() => onDeleteThread(s)}
+                  aria-label={`Delete ${displayTitle(s.title)}`}
+                  title="Delete thread"
+                >
+                  <TrashIcon size={13} />
+                </button>
+              </div>
             ))}
           </div>
         ))}
@@ -124,10 +144,22 @@ export function Sidebar({ sessions, activeID, busy, connected, modCount, onSelec
           <span className={connected ? 'status-dot ok' : 'status-dot'} />
           <span>{connected ? 'Connected' : 'Connecting…'}</span>
         </span>
-        <button type="button" className="mods-btn" onClick={onOpenMods}>
-          <PuzzleIcon size={13} />
-          Mods{modCount > 0 && ` · ${modCount}`}
-        </button>
+        <span className="footer-actions">
+          <button
+            type="button"
+            className="mods-btn"
+            onClick={onDeleteAll}
+            disabled={sessions.length === 0}
+            title="Delete all threads in this workspace"
+            aria-label="Delete all threads"
+          >
+            <TrashIcon size={13} />
+          </button>
+          <button type="button" className="mods-btn" onClick={onOpenMods}>
+            <PuzzleIcon size={13} />
+            Mods{modCount > 0 && ` · ${modCount}`}
+          </button>
+        </span>
       </div>
     </aside>
   )

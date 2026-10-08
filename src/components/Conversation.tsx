@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import type { MessageView } from '../lib/chatState'
 import { Markdown, PartView } from './MessageParts'
-import { ArrowDownIcon, CheckIcon, CopyIcon, RetryIcon } from './Icons'
+import type { AssistantMessage } from '@opencode-ai/sdk'
+import { AlertIcon, ArrowDownIcon, CheckIcon, CopyIcon, RetryIcon } from './Icons'
 
 type Props = {
   messages: MessageView[]
@@ -14,6 +15,24 @@ function textOf(m: MessageView) {
     .filter((p) => p.type === 'text' && !p.synthetic && !p.ignored)
     .map((p) => (p.type === 'text' ? p.text : ''))
     .join('\n\n')
+}
+
+// A failed turn (bad key, no balance, provider down, aborted) is recorded on the assistant message.
+function errorOf(m: MessageView): { title: string; detail: string } | null {
+  if (m.info.role !== 'assistant') return null
+  const err = (m.info as AssistantMessage).error as
+    | { name?: string; data?: { message?: string; statusCode?: number; providerID?: string } }
+    | undefined
+  if (!err) return null
+  if (err.name === 'MessageAbortedError') return { title: 'Stopped', detail: 'This reply was stopped before it finished.' }
+  const status = err.data?.statusCode
+  const title =
+    err.name === 'ProviderAuthError' || status === 401 || status === 403
+      ? "The provider refused the request"
+      : status === 402 || status === 429
+        ? 'Out of credits or rate-limited'
+        : 'The model request failed'
+  return { title, detail: err.data?.message || err.name || 'Unknown error' }
 }
 
 function Actions({ text, onRetry }: { text: string; onRetry?: () => void }) {
@@ -82,16 +101,30 @@ export function Conversation({ messages, busy, onRetry }: Props) {
             }
             const live = busy && m === last
             const text = textOf(m)
+            const failure = errorOf(m)
             // retry re-asks the user message this answer replied to
             const prompt = [...messages.slice(0, i)].reverse().find((x) => x.info.role === 'user')
+            const retry = prompt && !busy ? () => onRetry(textOf(prompt)) : undefined
             return (
               <div key={m.info.id} className="msg-assistant">
                 {m.parts.map((p) => (
                   <PartView key={p.id} part={p} live={live} />
                 ))}
-                {!live && text && (
-                  <Actions text={text} onRetry={prompt && !busy ? () => onRetry(textOf(prompt)) : undefined} />
+                {failure && (
+                  <div className="msg-error" role="alert">
+                    <AlertIcon size={15} />
+                    <div className="msg-error-body">
+                      <div className="msg-error-title">{failure.title}</div>
+                      <div className="msg-error-detail">{failure.detail}</div>
+                    </div>
+                    {retry && (
+                      <button type="button" className="btn ghost" onClick={retry}>
+                        Try again
+                      </button>
+                    )}
+                  </div>
                 )}
+                {!live && text && <Actions text={text} onRetry={retry} />}
               </div>
             )
           })}

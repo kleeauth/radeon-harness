@@ -10,11 +10,16 @@ import {
 import { useChat } from './lib/useChat'
 import { useCommands, type Builtin } from './lib/useCommands'
 import { INTELLIGENT_UI_PROMPT } from './lib/intelligentUi'
+import { buildModPrompt } from './lib/modPrompt'
 import { mods, useMods } from './mods/runtime'
 import { Sidebar } from './components/Sidebar'
 import { Composer } from './components/Composer'
 import { Conversation } from './components/Conversation'
 import { ModBands, ModStatusLine, ModToasts, ModsPanel } from './components/ModChrome'
+import { ConfirmDialog } from './components/ConfirmDialog'
+import { QuestionCard } from './components/QuestionCard'
+import { WIDGET_FIX_EVENT, type WidgetFixRequest } from './components/Widget'
+import type { Session } from '@opencode-ai/sdk'
 import { AlertIcon, ComposeIcon, LogoMark, SidebarIcon, XIcon } from './components/Icons'
 import './App.css'
 
@@ -59,6 +64,7 @@ export default function App() {
   const [draft, setDraft] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [modsOpen, setModsOpen] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState<{ kind: 'one'; session: Session } | { kind: 'all' } | null>(null)
 
   // wide windows: a docked sidebar that remembers its state; narrow ones: a slide-over drawer
   const [sidebarOpen, setSidebarOpen] = useState(() => readPref(SIDEBAR_KEY, true))
@@ -139,6 +145,8 @@ export default function App() {
       { name: 'new', description: 'Start a new thread', run: () => newThread() },
       { name: 'mods', description: 'Manage mods', run: () => setModsOpen(true) },
       { name: 'ui', description: 'Toggle Intelligent UI widgets', run: () => setIntelligent((v) => !v) },
+      // handled in submit(): it needs to send a prompt and watch the turn
+      { name: 'mod', description: 'Have the model build a mod: /mod <what it should do>', run: () => {} },
     ],
     [newThread],
   )
@@ -179,6 +187,18 @@ export default function App() {
     setError(null)
     try {
       const cmd = commands.parse(text)
+      if (cmd?.kind === 'builtin' && cmd.builtin.name === 'mod') {
+        const modsDir = window.opencodeApp?.modsDir
+        if (!modsDir) return mods.toast('mod', 'Building mods needs the desktop app')
+        if (!cmd.args.trim()) {
+          setDraft('/mod ')
+          return mods.toast('mod', 'Describe the mod after /mod, e.g. /mod show a clock in the status line')
+        }
+        const id = await ensureThread()
+        modBuildRef.current = { sessionID: id, sawBusy: false }
+        await chat.send(id, buildModPrompt(cmd.args.trim(), modsDir), model)
+        return
+      }
       if (cmd?.kind === 'builtin') return cmd.builtin.run(cmd.args)
       if (cmd?.kind === 'mod') {
         const out = await mods.runCommand(cmd.name, cmd.args)
@@ -197,6 +217,42 @@ export default function App() {
     }
   }
 
+  // after a /mod build finishes, load what the model wrote
+  const modBuildRef = useRef<{ sessionID: string; sawBusy: boolean } | null>(null)
+  useEffect(() => {
+    const pending = modBuildRef.current
+    if (!pending) return
+    if (state.busy[pending.sessionID]) {
+      pending.sawBusy = true
+    } else if (pending.sawBusy) {
+      modBuildRef.current = null
+      const before = new Set(mods.getSnapshot().mods.map((m) => m.info.name))
+      void mods.reload().then(() => {
+        const added = mods.getSnapshot().mods.filter((m) => !before.has(m.info.name))
+        const broken = added.filter((m) => m.error)
+        if (broken.length) mods.toast('mod', `${broken[0].info.name} loaded with an error: open Mods to see it`)
+        else if (added.length) mods.toast('mod', `Mod ready: ${added.map((m) => m.info.name).join(', ')}`)
+        // some models describe the files instead of writing them with tools
+        else mods.toast('mod', "No new mod was written: this model skipped its file tools. Try again, or with a stronger model.")
+      })
+    }
+  }, [state.busy])
+
+  // "Fix it" on a broken widget: send the error back to the model in this thread
+  const submitRef = useRef(submit)
+  submitRef.current = submit
+  useEffect(() => {
+    const onFix = (e: Event) => {
+      const { errors } = (e as CustomEvent<WidgetFixRequest>).detail
+      void submitRef.current(
+        `The widget you just made failed in the app with this error:\n\n${errors.map((m) => `- ${m}`).join('\n')}\n\n` +
+          'Please send a corrected widget. Wrap the script in an IIFE so names like `top` or `name` cannot collide with browser globals.',
+      )
+    }
+    window.addEventListener(WIDGET_FIX_EVENT, onFix)
+    return () => window.removeEventListener(WIDGET_FIX_EVENT, onFix)
+  }, [])
+
   const messages = useMemo(() => {
     if (!activeID) return []
     const s = state.sessions[activeID]
@@ -206,6 +262,7 @@ export default function App() {
   const busy = activeID ? !!state.busy[activeID] : false
   const pending = state.permissions.filter((p) => p.sessionID === activeID)
   const thread = activeID ? state.threads[activeID] : undefined
+  const topLevelThreads = Object.values(state.threads).filter((s) => !s.parentID)
 
   const composer = (
     <>
@@ -240,6 +297,8 @@ export default function App() {
         onNew={newThread}
         onOpenMods={() => setModsOpen(true)}
         onCollapse={toggleSidebar}
+        onDeleteThread={(session) => setConfirmDelete({ kind: 'one', session })}
+        onDeleteAll={() => setConfirmDelete({ kind: 'all' })}
       />
 
       <main className="main">
@@ -288,8 +347,8 @@ export default function App() {
                   <div className="permission-text">
                     <AlertIcon size={16} />
                     <div>
-                      <div className="permission-title">Permission needed</div>
-                      <div className="permission-detail">{p.title}</div>
+                      <div className="permission-title">{p.title}</div>
+                      {p.detail && <div className="permission-detail">{p.detail}</div>}
                     </div>
                   </div>
                   <div className="permission-actions">
@@ -305,6 +364,16 @@ export default function App() {
                   </div>
                 </div>
               ))}
+              {state.questions
+                .filter((q) => q.sessionID === activeID)
+                .map((q) => (
+                  <QuestionCard
+                    key={q.id}
+                    question={q}
+                    onAnswer={(answers) => chat.answerQuestion(q.id, answers)}
+                    onDismiss={() => chat.dismissQuestion(q.id)}
+                  />
+                ))}
               {composer}
             </div>
           </>
@@ -323,6 +392,45 @@ export default function App() {
       </main>
 
       {modsOpen && <ModsPanel onClose={() => setModsOpen(false)} />}
+
+      {confirmDelete?.kind === 'one' && (
+        <ConfirmDialog
+          title="Delete this thread?"
+          confirmLabel="Delete thread"
+          onCancel={() => setConfirmDelete(null)}
+          onConfirm={async () => {
+            const id = confirmDelete.session.id
+            await chat.deleteThread(id)
+            if (id === activeID) newThread()
+            setConfirmDelete(null)
+          }}
+        >
+          <p>
+            <strong>{displayTitle(confirmDelete.session.title)}</strong> and all of its messages will be permanently
+            deleted from opencode. This can't be undone.
+          </p>
+        </ConfirmDialog>
+      )}
+
+      {confirmDelete?.kind === 'all' && (
+        <ConfirmDialog
+          title="Delete all threads?"
+          confirmLabel={`Delete ${topLevelThreads.length} threads`}
+          onCancel={() => setConfirmDelete(null)}
+          onConfirm={async () => {
+            // sub-agent sessions go with their parent, so only top-level threads are deleted directly
+            for (const s of topLevelThreads) await chat.deleteThread(s.id)
+            newThread()
+            setConfirmDelete(null)
+          }}
+        >
+          <p>
+            All {topLevelThreads.length} threads in this workspace (<code>{window.opencodeApp?.workspace ?? 'current folder'}</code>)
+            will be permanently deleted from opencode, including in the opencode terminal app. This can't be undone.
+          </p>
+          <p>Threads in other workspace folders aren't affected.</p>
+        </ConfirmDialog>
+      )}
     </div>
   )
 }

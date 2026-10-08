@@ -24,6 +24,7 @@ Widget rules:
 - The widget sits directly in the chat, not in a page or window. Do not draw an outer card, frame, border, shadow or page background around it, and do not repeat the answer as a title bar. Style only the inner elements.
 - Dark theme to match the app: text #ececee, muted #7d7d86, surfaces #1b1b1e or #232327, borders #2a2a2f, accent #ed3b45, 8–10px radius. Inherit the font; don't set font-family.
 - Size: width is fluid up to about 720px. Never use vh/vw units or height:100% for layout; give canvases and game areas a fixed height (at most 480px) and let everything else size to its content. The whole widget should stay under about 600px tall.
+- Wrap all script code in an IIFE: (() => { ... })(). Top-level names like \`top\`, \`name\` or \`location\` collide with browser globals and stop the whole script. Attach events with addEventListener instead of inline onclick attributes.
 - Make controls work immediately with sensible defaults, and update results live as inputs change.
 - Put a one-line text lead-in before the widget, and keep any explanation outside the widget in normal markdown.
 - Use at most one or two widgets per answer, and only when they genuinely help.`

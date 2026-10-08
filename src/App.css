@@ -152,12 +152,30 @@
   width: 100%;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 7px 10px;
+  padding-right: 8px;
   border-radius: 8px;
   color: var(--text-2);
-  text-align: left;
   transition: background 0.12s, color 0.12s;
+}
+
+.thread-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 0 7px 10px;
+  color: inherit;
+  text-align: left;
+}
+
+.footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.footer-actions .mods-btn:disabled {
+  opacity: 0.35;
 }
 .thread:hover {
   background: var(--hover);

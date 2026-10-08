@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('opencodeApp', {
   token: config.token,
   widgetOrigin: config.widgetOrigin,
   workspace: config.workspace,
+  modsDir: config.modsDir,
   platform: process.platform,
   openModsFolder: () => ipcRenderer.send('app:open-mods'),
   chooseWorkspace: () => ipcRenderer.invoke('app:choose-workspace'),

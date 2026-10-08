@@ -7,6 +7,7 @@ declare global {
       token: string
       widgetOrigin: string
       workspace: string
+      modsDir: string
       platform: string
       openModsFolder: () => void
       chooseWorkspace: () => Promise<boolean>

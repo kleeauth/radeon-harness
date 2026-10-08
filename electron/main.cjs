@@ -420,6 +420,15 @@ const BOOTSTRAP = BASE_STYLE + '<script>(' + function () {
   document.addEventListener('DOMContentLoaded', send);
   window.addEventListener('load', send);
 
+  // a broken widget script must not fail silently: report it so the app can show it
+  window.addEventListener('error', (e) => {
+    parent.postMessage({ type: 'widget-error', message: String(e.message || 'script error'), line: e.lineno || 0 }, '*');
+  });
+  window.addEventListener('unhandledrejection', (e) => {
+    const reason = e.reason && e.reason.message ? e.reason.message : String(e.reason);
+    parent.postMessage({ type: 'widget-error', message: 'Unhandled promise rejection: ' + reason, line: 0 }, '*');
+  });
+
   let seq = 0;
   const pending = new Map();
   window.addEventListener('message', (e) => {
@@ -572,7 +581,12 @@ ipcMain.on('app:open-mods', () => {
 })
 
 ipcMain.on('app:config', (event) => {
-  event.returnValue = { token: APP_TOKEN, widgetOrigin: `http://127.0.0.1:${widgetPort}`, workspace: workspaceDir() }
+  event.returnValue = {
+    token: APP_TOKEN,
+    widgetOrigin: `http://127.0.0.1:${widgetPort}`,
+    workspace: workspaceDir(),
+    modsDir: modDirs().user,
+  }
 })
 
 // switching folders restarts the app so opencode starts fresh inside the new one

@@ -1,9 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { widgetOrigin } from '../lib/opencode'
 import { allowAlways, hostOf, isAlwaysAllowed, liveFetch, type LiveResult } from '../lib/liveData'
-import { GlobeIcon, SparkleIcon } from './Icons'
+import { prepareWidgetHtml } from '../lib/widgetPrep'
+import { AlertIcon, GlobeIcon, SparkleIcon } from './Icons'
 
 const MAX_HEIGHT = 720
+
+// "Fix it" travels to the App as a window event, so widgets don't need the chat wired through markdown
+export const WIDGET_FIX_EVENT = 'radeon:fix-widget'
+export type WidgetFixRequest = { errors: string[] }
 
 type Pending = { id: number; url: string }
 
@@ -20,6 +25,7 @@ export function Widget({ html }: { html: string }) {
   const queue = useRef(new Map<string, Pending[]>())
   const [asking, setAsking] = useState<string[]>([])
   const [sources, setSources] = useState<string[]>([])
+  const [errors, setErrors] = useState<string[]>([])
 
   const reply = useCallback((id: number, result: LiveResult) => {
     frameRef.current?.contentWindow?.postMessage({ type: 'widget-fetch-result', id, result }, '*')
@@ -54,7 +60,10 @@ export function Widget({ html }: { html: string }) {
       if (e.source !== frameRef.current?.contentWindow) return
       const data = e.data as { type?: string; h?: number; id?: number; url?: string }
       if (data.type === 'widget-ready') {
-        frameRef.current?.contentWindow?.postMessage({ type: 'widget-render', html }, '*')
+        frameRef.current?.contentWindow?.postMessage({ type: 'widget-render', html: prepareWidgetHtml(html) }, '*')
+      } else if (data.type === 'widget-error') {
+        const message = String((e.data as { message?: unknown }).message ?? 'script error')
+        setErrors((list) => (list.includes(message) || list.length >= 3 ? list : [...list, message]))
       } else if (data.type === 'widget-height' && typeof data.h === 'number') {
         setHeight(Math.min(Math.max(data.h, 40), MAX_HEIGHT))
       } else if (data.type === 'widget-fetch' && typeof data.id === 'number' && typeof data.url === 'string') {
@@ -88,14 +97,6 @@ export function Widget({ html }: { html: string }) {
 
   return (
     <div className="widget seamless">
-      <div className="widget-tools">
-        {sources.length > 0 && (
-          <span className="widget-live" title={sources.join(', ')}>
-            <span className="live-dot" /> Live · {sources.length === 1 ? sources[0] : `${sources.length} sources`}
-          </span>
-        )}
-        <button type="button" onClick={() => setShowCode((s) => !s)}>{showCode ? 'Hide code' : 'Code'}</button>
-      </div>
 
       {asking.map((host) => (
         <div key={host} className="widget-ask">
@@ -111,6 +112,23 @@ export function Widget({ html }: { html: string }) {
         </div>
       ))}
 
+      {errors.length > 0 && (
+        <div className="widget-error">
+          <AlertIcon size={15} />
+          <span className="widget-error-text">
+            This widget hit an error: <code>{errors[0]}</code>
+            {errors.length > 1 && ` (+${errors.length - 1} more)`}
+          </span>
+          <button
+            type="button"
+            className="btn ghost"
+            onClick={() => window.dispatchEvent(new CustomEvent<WidgetFixRequest>(WIDGET_FIX_EVENT, { detail: { errors } }))}
+          >
+            Fix it
+          </button>
+        </div>
+      )}
+
       <iframe
         ref={frameRef}
         className="widget-frame"
@@ -119,6 +137,15 @@ export function Widget({ html }: { html: string }) {
         sandbox="allow-scripts"
         style={{ height }}
       />
+      {/* below the widget, in the flow: floating over it covered the widget's own corner buttons */}
+      <div className="widget-tools">
+        {sources.length > 0 && (
+          <span className="widget-live" title={sources.join(', ')}>
+            <span className="live-dot" /> Live · {sources.length === 1 ? sources[0] : `${sources.length} sources`}
+          </span>
+        )}
+        <button type="button" onClick={() => setShowCode((s) => !s)}>{showCode ? 'Hide code' : 'View code'}</button>
+      </div>
       {showCode && <pre className="widget-code">{html}</pre>}
     </div>
   )
