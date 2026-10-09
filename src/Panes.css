@@ -1,0 +1,286 @@
+/* ---------- motion tokens ---------- */
+
+:root {
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* ---------- split panes (1, 2, 3 or 4 chats) ---------- */
+
+.panes {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  gap: 1px;
+  background: var(--border); /* the 1px gaps become dividers */
+  transition: grid-template-columns 0.3s var(--ease-out);
+}
+.panes-1 {
+  grid-template-columns: 1fr;
+}
+.panes-2 {
+  grid-template-columns: 1fr 1fr;
+}
+.panes-3 {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+.panes-3 > .pane:first-child {
+  grid-row: span 2;
+}
+.panes-4 {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+
+.pane {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--bg);
+  animation: pane-in 0.36s var(--ease-out) both;
+}
+
+/* the focused pane: a quiet accent line on top, everything else dims slightly */
+.pane.split::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 2px;
+  background: var(--accent);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.35s var(--ease-out);
+  z-index: 3;
+}
+.pane.split.focused::before {
+  transform: scaleX(1);
+}
+.pane.split:not(.focused) {
+  --pane-dim: 0.82;
+}
+.pane.split:not(.focused) .conversation,
+.pane.split:not(.focused) .hero {
+  opacity: var(--pane-dim, 1);
+  transition: opacity 0.25s var(--ease-out);
+}
+.pane.split .conversation,
+.pane.split .hero {
+  transition: opacity 0.25s var(--ease-out);
+}
+
+.pane-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 38px;
+  flex-shrink: 0;
+  padding: 0 8px 0 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--sidebar);
+}
+.pane-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pane.focused .pane-title {
+  color: var(--text);
+}
+.pane-close {
+  width: 26px;
+  height: 26px;
+  opacity: 0.6;
+}
+.pane-head:hover .pane-close {
+  opacity: 1;
+}
+
+/* tighter spacing when panes are narrow */
+.pane.split .conversation-inner {
+  padding: 18px 18px 16px;
+}
+.pane.split .dock {
+  padding: 0 14px 14px;
+}
+.pane.split .hero h1 {
+  font-size: 22px;
+}
+.pane.split .hero-sub {
+  display: none;
+}
+.panes-4 .suggestions,
+.panes-3 > .pane:not(:first-child) .suggestions {
+  display: none;
+}
+
+.split-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: auto;
+  padding: 0 10px;
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--muted);
+}
+.split-btn:disabled {
+  opacity: 0.35;
+}
+
+/* dragging a thread from the sidebar */
+.drop-hint-panes {
+  position: absolute;
+  inset: 10px;
+  display: grid;
+  place-items: center;
+  border: 2px dashed var(--accent);
+  border-radius: 16px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 14px;
+  pointer-events: none;
+  z-index: 20;
+  animation: fade 0.18s var(--ease-out);
+}
+
+/* the sidebar marks every thread that's open in a pane */
+.thread.open:not(.active) {
+  box-shadow: inset 2px 0 0 var(--border-strong);
+}
+.thread.active {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+/* ---------- motion pass ---------- */
+
+@keyframes pane-in {
+  from {
+    opacity: 0;
+    transform: scale(0.985);
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+.msg-user,
+.msg-assistant {
+  animation: rise 0.38s var(--ease-out) both;
+}
+
+.hero > * {
+  animation: rise 0.5s var(--ease-out) both;
+}
+.hero > :nth-child(2) {
+  animation-delay: 0.04s;
+}
+.hero > :nth-child(3) {
+  animation-delay: 0.08s;
+}
+.hero > :nth-child(4) {
+  animation-delay: 0.12s;
+}
+.suggestion {
+  animation: rise 0.5s var(--ease-out) both;
+}
+
+.tool-body,
+.reasoning-body,
+.permission-card,
+.question-card,
+.msg-error,
+.mod-band {
+  animation: rise 0.28s var(--ease-out) both;
+}
+
+/* tactile buttons */
+button {
+  transition: background 0.15s var(--ease-out), color 0.15s var(--ease-out), border-color 0.15s var(--ease-out),
+    opacity 0.15s var(--ease-out), transform 0.12s var(--ease-out);
+}
+button:active:not(:disabled) {
+  transform: scale(0.97);
+}
+.send-btn:hover:not(:disabled) {
+  transform: scale(1.07);
+  transition: transform 0.25s var(--ease-spring);
+}
+
+/* composer: a soft glow while typing */
+.composer {
+  transition: border-color 0.2s var(--ease-out), box-shadow 0.25s var(--ease-out), background 0.2s var(--ease-out);
+}
+.composer:focus-within {
+  box-shadow: var(--shadow), 0 0 0 4px rgba(237, 59, 69, 0.08);
+}
+
+/* sidebar threads glide on hover */
+.thread-main {
+  transition: transform 0.18s var(--ease-out);
+}
+.thread:hover .thread-main {
+  transform: translateX(2px);
+}
+
+.chip,
+.suggestion,
+.thread,
+.workspace-btn,
+.new-thread {
+  transition: background 0.15s var(--ease-out), color 0.15s var(--ease-out), border-color 0.15s var(--ease-out),
+    transform 0.12s var(--ease-out), box-shadow 0.2s var(--ease-out);
+}
+
+.popover,
+.slash-menu,
+.mods-panel,
+.confirm-dialog {
+  animation: pop-in 0.22s var(--ease-spring) both;
+  transform-origin: bottom left;
+}
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.97);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pane,
+  .msg-user,
+  .msg-assistant,
+  .hero > *,
+  .suggestion,
+  .tool-body,
+  .reasoning-body,
+  .permission-card,
+  .question-card,
+  .msg-error,
+  .mod-band,
+  .popover,
+  .slash-menu,
+  .mods-panel,
+  .confirm-dialog,
+  .drop-hint-panes {
+    animation: none;
+  }
+  .panes,
+  button,
+  .thread-main {
+    transition: none;
+  }
+}

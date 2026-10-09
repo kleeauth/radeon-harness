@@ -1,6 +1,8 @@
 // /client is the browser-safe entry; the root export also pulls in Node process spawning.
 import { createOpencodeClient } from '@opencode-ai/sdk/client'
 
+export type WindowState = { maximized: boolean; fullscreen: boolean }
+
 declare global {
   interface Window {
     opencodeApp?: {
@@ -11,6 +13,8 @@ declare global {
       platform: string
       openModsFolder: () => void
       chooseWorkspace: () => Promise<boolean>
+      getWindowState: () => WindowState
+      onWindowState: (fn: (state: WindowState) => void) => () => void
     }
   }
 }

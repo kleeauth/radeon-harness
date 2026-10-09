@@ -11,4 +11,11 @@ contextBridge.exposeInMainWorld('opencodeApp', {
   platform: process.platform,
   openModsFolder: () => ipcRenderer.send('app:open-mods'),
   chooseWorkspace: () => ipcRenderer.invoke('app:choose-workspace'),
+  // { maximized, fullscreen } now, and a subscription that returns its own unsubscribe
+  getWindowState: () => ipcRenderer.sendSync('app:get-window-state'),
+  onWindowState: (fn) => {
+    const listener = (_e, state) => fn(state)
+    ipcRenderer.on('app:window-state', listener)
+    return () => ipcRenderer.removeListener('app:window-state', listener)
+  },
 })

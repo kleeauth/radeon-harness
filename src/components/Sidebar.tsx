@@ -1,7 +1,10 @@
 import { useMemo, useState } from 'react'
 import type { Session } from '@opencode-ai/sdk'
 import { displayTitle } from '../lib/opencode'
-import { FolderIcon, LogoMark, PlusIcon, PuzzleIcon, SearchIcon, SidebarIcon, TrashIcon } from './Icons'
+import { FolderIcon, LogoMark, PlusIcon, PuzzleIcon, SearchIcon, SidebarIcon, SplitIcon, TrashIcon } from './Icons'
+
+// drag payload type for a thread dragged from the sidebar onto the chat area
+export const THREAD_DRAG_TYPE = 'application/x-radeon-thread'
 
 // last path segment, for both C:\Users\me\project and /home/me/project
 function folderName(p: string) {
@@ -11,6 +14,7 @@ function folderName(p: string) {
 type Props = {
   sessions: Session[]
   activeID: string | null
+  openIDs: string[] // threads shown in a pane right now
   busy: Record<string, boolean>
   connected: boolean
   modCount: number
@@ -19,6 +23,7 @@ type Props = {
   onOpenMods: () => void
   onCollapse: () => void
   onDeleteThread: (s: Session) => void
+  onOpenInSplit: (sessionID: string) => void
   onDeleteAll: () => void
 }
 
@@ -47,6 +52,7 @@ function relative(ts: number, now: number): string {
 export function Sidebar({
   sessions,
   activeID,
+  openIDs,
   busy,
   connected,
   modCount,
@@ -55,6 +61,7 @@ export function Sidebar({
   onOpenMods,
   onCollapse,
   onDeleteThread,
+  onOpenInSplit,
   onDeleteAll,
 }: Props) {
   const [query, setQuery] = useState('')
@@ -118,11 +125,33 @@ export function Sidebar({
           <div key={label} className="thread-group">
             <div className="thread-group-label">{label}</div>
             {list.map((s) => (
-              <div key={s.id} className={s.id === activeID ? 'thread active' : 'thread'}>
-                <button type="button" className="thread-main" onClick={() => onSelect(s.id)}>
+              <div
+                key={s.id}
+                className={['thread', s.id === activeID ? 'active' : '', openIDs.includes(s.id) ? 'open' : ''].join(' ')}
+              >
+                <button
+                  type="button"
+                  className="thread-main"
+                  onClick={() => onSelect(s.id)}
+                  draggable
+                  onDragStart={(e) => {
+                    // dropped on the chat area, the thread opens in a new split pane
+                    e.dataTransfer.setData(THREAD_DRAG_TYPE, s.id)
+                    e.dataTransfer.effectAllowed = 'copy'
+                  }}
+                >
                   {busy[s.id] && <span className="thread-busy" aria-label="running" />}
                   <span className="thread-title">{displayTitle(s.title)}</span>
                   <span className="thread-time">{relative(s.time.updated, groups.now)}</span>
+                </button>
+                <button
+                  type="button"
+                  className="thread-delete thread-split"
+                  onClick={() => onOpenInSplit(s.id)}
+                  aria-label={`Open ${displayTitle(s.title)} in split view`}
+                  title="Open in split view (or drag it onto the chat)"
+                >
+                  <SplitIcon size={13} />
                 </button>
                 <button
                   type="button"

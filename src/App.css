@@ -1,5 +1,6 @@
 @import './Chat.css';
 @import './Mods.css';
+@import './Panes.css';
 
 .app {
   display: grid;

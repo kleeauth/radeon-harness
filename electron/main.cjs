@@ -670,6 +670,15 @@ function startGateway() {
 
 let mainWindow = null
 
+function windowState(win) {
+  return { maximized: win.isMaximized(), fullscreen: win.isFullScreen() }
+}
+
+ipcMain.on('app:get-window-state', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender)
+  event.returnValue = win ? windowState(win) : { maximized: false, fullscreen: false }
+})
+
 const escapeHtml = (s) =>
   String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c])
 
@@ -727,6 +736,12 @@ function createWindow() {
   })
   win.webContents.on('render-process-gone', (_e, details) => log('renderer gone:', details.reason, details.exitCode))
   win.webContents.on('did-fail-load', (_e, code, desc, url) => log('load failed:', code, desc, url))
+  // the renderer allows up to 4 split panes only while the window fills the screen
+  const sendWindowState = () => {
+    if (!win.isDestroyed()) win.webContents.send('app:window-state', windowState(win))
+  }
+  for (const evt of ['maximize', 'unmaximize', 'enter-full-screen', 'leave-full-screen', 'restore'])
+    win.on(evt, sendWindowState)
   mainWindow = win
   return win
 }
