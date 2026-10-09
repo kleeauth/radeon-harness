@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ModelRef, ProviderOption } from '../lib/opencode'
 import { imagesFrom, MAX_IMAGES, type ImageAttachment } from '../lib/images'
-import { AlertIcon, ArrowUpIcon, ImageIcon, SparkleIcon, StopIcon, XIcon } from './Icons'
+import { AlertIcon, ArrowUpIcon, ImageIcon, LinkIcon, SparkleIcon, StopIcon, XIcon } from './Icons'
 import { ModelPicker } from './ModelPicker'
 import { ThinkingPicker } from './ThinkingPicker'
+import { ContextPicker, type ContextOption } from './ContextPicker'
+import { THREAD_DRAG_TYPE } from './Sidebar'
 
 export type SlashCommand = { name: string; description: string; source: string }
 
@@ -23,6 +25,10 @@ type Props = {
   onAddImages: (files: File[]) => void
   onRemoveImage: (id: string) => void
   thinking: string | null
+  contextOptions: ContextOption[]
+  contexts: Array<{ id: string; title: string }> // chats shared with the next message
+  onAddContext: (sessionID: string) => void
+  onRemoveContext: (sessionID: string) => void
   onThinkingChange: (variant: string | null) => void
   placeholder?: string
 }
@@ -45,12 +51,16 @@ export function Composer(props: Props) {
     onRemoveImage,
     thinking,
     onThinkingChange,
+    contextOptions,
+    contexts,
+    onAddContext,
+    onRemoveContext,
   } = props
   const ref = useRef<HTMLTextAreaElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const [selected, setSelected] = useState(0)
   const [dismissed, setDismissed] = useState(false)
-  const [dragging, setDragging] = useState(false)
+  const [dragging, setDragging] = useState<false | 'file' | 'thread'>(false)
 
   // grow with content up to a cap, then scroll
   useEffect(() => {
@@ -101,9 +111,12 @@ export function Composer(props: Props) {
         if (canSend) onSubmit()
       }}
       onDragOver={(e) => {
-        if (!Array.from(e.dataTransfer.items).some((i) => i.kind === 'file')) return
+        const thread = e.dataTransfer.types.includes(THREAD_DRAG_TYPE)
+        if (!thread && !Array.from(e.dataTransfer.items).some((i) => i.kind === 'file')) return
         e.preventDefault()
-        setDragging(true)
+        // a chat dropped here is shared as context, not opened in a split pane
+        if (thread) e.stopPropagation()
+        setDragging(thread ? 'thread' : 'file')
       }}
       onDragLeave={(e) => {
         if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragging(false)
@@ -111,6 +124,11 @@ export function Composer(props: Props) {
       onDrop={(e) => {
         e.preventDefault()
         setDragging(false)
+        const thread = e.dataTransfer.getData(THREAD_DRAG_TYPE)
+        if (thread) {
+          e.stopPropagation()
+          return onAddContext(thread)
+        }
         const files = imagesFrom(e.dataTransfer.files)
         if (files.length) onAddImages(files)
       }}
@@ -138,7 +156,23 @@ export function Composer(props: Props) {
         </div>
       )}
 
-      {dragging && <div className="drop-hint">Drop images to attach</div>}
+      {dragging && (
+        <div className="drop-hint">{dragging === 'thread' ? "Drop to share this chat's context" : 'Drop images to attach'}</div>
+      )}
+
+      {contexts.length > 0 && (
+        <div className="context-chips">
+          {contexts.map((c) => (
+            <span key={c.id} className="context-chip-item" title={`The conversation from "${c.title}" goes along with your next message`}>
+              <LinkIcon size={12} />
+              <span className="context-chip-title">{c.title}</span>
+              <button type="button" onClick={() => onRemoveContext(c.id)} aria-label={`Stop sharing ${c.title}`}>
+                <XIcon size={11} />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
 
       {images.length > 0 && (
         <div className="attachments">
@@ -221,6 +255,11 @@ export function Composer(props: Props) {
         </button>
         <ModelPicker providers={providers} value={model} onChange={onModelChange} />
         {levels.length > 0 && <ThinkingPicker variants={levels} value={thinking} onChange={onThinkingChange} />}
+        <ContextPicker
+          options={contextOptions}
+          selected={contexts.map((c) => c.id)}
+          onToggle={(id) => (contexts.some((c) => c.id === id) ? onRemoveContext(id) : onAddContext(id))}
+        />
         <button
           type="button"
           className={intelligent ? 'chip toggle on' : 'chip toggle'}

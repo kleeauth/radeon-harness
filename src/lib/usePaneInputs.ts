@@ -6,6 +6,8 @@ export function usePaneInputs() {
   const [drafts, setDrafts] = useState<Record<string, string>>({})
   const [images, setImages] = useState<Record<string, ImageAttachment[]>>({})
   const [errors, setErrors] = useState<Record<string, string | null>>({})
+  // other chats whose conversation goes along with this pane's next message
+  const [contexts, setContexts] = useState<Record<string, string[]>>({})
 
   const setDraft = useCallback((pane: string, text: string) => setDrafts((d) => ({ ...d, [pane]: text })), [])
   const setError = useCallback((pane: string, msg: string | null) => setErrors((e) => ({ ...e, [pane]: msg })), [])
@@ -28,7 +30,22 @@ export function usePaneInputs() {
     [setError, setPaneImages],
   )
 
+  const addContext = useCallback(
+    (pane: string, sessionID: string) =>
+      setContexts((all) => ({ ...all, [pane]: [...new Set([...(all[pane] ?? []), sessionID])].slice(0, 4) })),
+    [],
+  )
+  const removeContext = useCallback(
+    (pane: string, sessionID: string) => setContexts((all) => ({ ...all, [pane]: (all[pane] ?? []).filter((s) => s !== sessionID) })),
+    [],
+  )
+  const clearContexts = useCallback((pane: string) => setContexts((all) => ({ ...all, [pane]: [] })), [])
+
   return {
+    contextsOf: (pane: string) => contexts[pane] ?? [],
+    addContext,
+    removeContext,
+    clearContexts,
     draftOf: (pane: string) => drafts[pane] ?? '',
     imagesOf: (pane: string) => images[pane] ?? [],
     errorOf: (pane: string) => errors[pane] ?? null,

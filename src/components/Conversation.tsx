@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import type { MessageView } from '../lib/chatState'
 import { Markdown, PartView } from './MessageParts'
 import type { AssistantMessage, FilePart } from '@opencode-ai/sdk'
-import { AlertIcon, ArrowDownIcon, CheckIcon, CopyIcon, RetryIcon } from './Icons'
+import { AlertIcon, ArrowDownIcon, CheckIcon, CopyIcon, LinkIcon, RetryIcon } from './Icons'
+import { sharedContextTitle } from '../lib/sharedContext'
 
 type Props = {
   messages: MessageView[]
@@ -101,8 +102,21 @@ export function Conversation({ messages, busy, onRetry }: Props) {
                 (p): p is FilePart => p.type === 'file' && p.mime.startsWith('image/') && !!p.url,
               )
               const hasText = m.parts.some((p) => p.type === 'text' && !p.synthetic && p.text)
+              const shared = m.parts.flatMap((p) => {
+                const t = p.type === 'text' && p.synthetic ? sharedContextTitle(p.text) : null
+                return t ? [t] : []
+              })
               return (
                 <div key={m.info.id} className="msg-user">
+                  {shared.length > 0 && (
+                    <div className="msg-context" title="Conversation shared from these chats">
+                      {shared.map((t, i) => (
+                        <span key={i}>
+                          <LinkIcon size={11} /> {t}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                   {pictures.length > 0 && (
                     <div className="msg-images">
                       {pictures.map((p) => (

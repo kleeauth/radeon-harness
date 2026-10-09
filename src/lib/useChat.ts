@@ -106,8 +106,11 @@ export function useChat() {
       system?: string,
       images: ImageAttachment[] = [],
       variant?: string | null,
+      sharedContexts: string[] = [],
     ) => {
       const parts = [
+        // other chats shared as context: the model reads them, the chat shows them as chips
+        ...sharedContexts.map((text) => ({ type: 'text' as const, text, synthetic: true })),
         ...images.map((img) => ({ type: 'file' as const, mime: img.mime, filename: img.name, url: img.dataUrl })),
         ...(text ? [{ type: 'text' as const, text }] : []),
       ]

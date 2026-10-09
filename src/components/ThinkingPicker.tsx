@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { useFloating } from '../lib/floating'
 import { BrainIcon, CheckIcon, ChevronDownIcon } from './Icons'
 
 type Props = {
@@ -30,11 +32,14 @@ const label = (v: string) => LABELS[v] ?? v.charAt(0).toUpperCase() + v.slice(1)
 export function ThinkingPicker({ variants, value, onChange }: Props) {
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
+  const popRef = useRef<HTMLDivElement>(null)
+  const floating = useFloating(rootRef, open, { width: 280, maxHeight: 360 })
 
   useEffect(() => {
     if (!open) return
     const onDown = (e: MouseEvent) => {
-      if (!rootRef.current?.contains(e.target as Node)) setOpen(false)
+      const t = e.target as Node
+      if (!rootRef.current?.contains(t) && !popRef.current?.contains(t)) setOpen(false)
     }
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false)
     document.addEventListener('mousedown', onDown)
@@ -61,8 +66,8 @@ export function ThinkingPicker({ variants, value, onChange }: Props) {
         <ChevronDownIcon size={14} />
       </button>
 
-      {open && (
-        <div className="popover thinking-popover" role="listbox">
+      {open && floating && createPortal(
+        <div className="popover thinking-popover floating" role="listbox" ref={popRef} style={floating}>
           <div className="popover-group">Thinking level</div>
           <div className="popover-list">
             {options.map((v) => {
@@ -86,7 +91,8 @@ export function ThinkingPicker({ variants, value, onChange }: Props) {
               )
             })}
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   )

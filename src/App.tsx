@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Session } from '@opencode-ai/sdk'
 import {
   appToken,
+  client,
   displayTitle,
   fetchProviders,
   pickDefaultModel,
@@ -15,6 +16,8 @@ import { usePaneInputs } from './lib/usePaneInputs'
 import { INTELLIGENT_UI_PROMPT } from './lib/intelligentUi'
 import { buildModPrompt } from './lib/modPrompt'
 import type { ImageAttachment } from './lib/images'
+import type { MessageView } from './lib/chatState'
+import { buildSharedContext } from './lib/sharedContext'
 import { mods, useMods } from './mods/runtime'
 import { Sidebar, THREAD_DRAG_TYPE } from './components/Sidebar'
 import { Composer } from './components/Composer'
@@ -125,15 +128,29 @@ export default function App() {
   useEffect(() => writePref(INTELLIGENT_KEY, intelligent), [intelligent])
   useEffect(() => writePref(THINKING_KEY, thinkingByModel), [thinkingByModel])
 
-  const modelKey = model ? `${model.providerID}/${model.modelID}` : ''
-  const modelLevels =
-    providers.find((p) => p.id === model?.providerID)?.models.find((m) => m.id === model?.modelID)?.variants ?? []
-  const thinking = modelLevels.includes(thinkingByModel[modelKey]) ? thinkingByModel[modelKey] : null
-  const setThinking = (variant: string | null) =>
+  // Each pane has its own model; `model` is the default for panes that haven't picked one
+  // (and follows the last pick, so new chats start there).
+  const modelOf = (paneId: string): ModelRef | null => panes.panes.find((p) => p.id === paneId)?.model ?? model
+
+  // pin every pane to a concrete model, so changing one pane's model can't move the others
+  useEffect(() => {
+    if (!model) return
+    for (const p of panes.panes) if (!p.model) panes.setModel(p.id, model)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [model, panes.panes])
+
+  // thinking levels are remembered per model, so they follow whichever model a pane uses
+  const keyOf = (m: ModelRef | null) => (m ? `${m.providerID}/${m.modelID}` : '')
+  const thinkingFor = (m: ModelRef | null) => {
+    const levels = providers.find((p) => p.id === m?.providerID)?.models.find((x) => x.id === m?.modelID)?.variants ?? []
+    const chosen = thinkingByModel[keyOf(m)]
+    return levels.includes(chosen) ? chosen : null
+  }
+  const setThinkingFor = (m: ModelRef | null, variant: string | null) =>
     setThinkingByModel((all) => {
       const next = { ...all }
-      if (variant) next[modelKey] = variant
-      else delete next[modelKey]
+      if (variant) next[keyOf(m)] = variant
+      else delete next[keyOf(m)]
       return next
     })
 
@@ -208,23 +225,38 @@ export default function App() {
   }
 
   // a plain prompt: mods may rewrite or swallow it first
-  const sendPrompt = async (paneId: string, text: string, withImages: ImageAttachment[] = []) => {
+  // another chat's conversation, as a hidden context block (uses what's loaded, fetches the rest)
+  const sharedContextFor = async (sessionID: string) => {
+    const title = displayTitle(state.threads[sessionID]?.title)
+    let messages = messagesOf(sessionID)
+    if (!messages.length) {
+      const res = await client.session.messages({ path: { id: sessionID } })
+      messages = (res.data ?? []) as MessageView[]
+    }
+    return buildSharedContext(title, messages)
+  }
+
+  const sendPrompt = async (paneId: string, text: string, withImages: ImageAttachment[] = [], shared: string[] = []) => {
     const id = await ensureThread(paneId)
     const result = await mods.dispatch('prompt.submit', { sessionID: id, text })
     if (!result) return
-    await chat.send(id, result.text, model, intelligent ? INTELLIGENT_UI_PROMPT : undefined, withImages, thinking)
+    const m = modelOf(paneId)
+    const contexts = await Promise.all(shared.filter((s) => s !== id).map(sharedContextFor))
+    await chat.send(id, result.text, m, intelligent ? INTELLIGENT_UI_PROMPT : undefined, withImages, thinkingFor(m), contexts)
   }
 
   const submit = async (paneId: string, override?: string) => {
     const text = (override ?? inputs.draftOf(paneId)).trim()
     // a retry or "Fix it" sends its own text and leaves attachments in the composer alone
     const attached = override === undefined ? inputs.imagesOf(paneId) : []
+    const shared = override === undefined ? inputs.contextsOf(paneId) : []
     if (!text && !attached.length) return
     inputs.setDraft(paneId, '')
     if (attached.length) inputs.setPaneImages(paneId, () => [])
+    if (shared.length) inputs.clearContexts(paneId)
     inputs.setError(paneId, null)
     try {
-      if (!text) return await sendPrompt(paneId, '', attached)
+      if (!text) return await sendPrompt(paneId, '', attached, shared)
       const cmd = commands.parse(text)
       if (cmd?.kind === 'builtin' && cmd.builtin.name === 'mod') {
         const modsDir = window.opencodeApp?.modsDir
@@ -235,7 +267,7 @@ export default function App() {
         }
         const id = await ensureThread(paneId)
         modBuildRef.current = { sessionID: id, sawBusy: false }
-        await chat.send(id, buildModPrompt(cmd.args.trim(), modsDir), model)
+        await chat.send(id, buildModPrompt(cmd.args.trim(), modsDir), modelOf(paneId))
         return
       }
       if (cmd?.kind === 'builtin') return cmd.builtin.run(cmd.args)
@@ -247,12 +279,13 @@ export default function App() {
       }
       if (cmd?.kind === 'opencode') {
         const id = await ensureThread(paneId)
-        return await chat.runCommand(id, cmd.name, cmd.args, model)
+        return await chat.runCommand(id, cmd.name, cmd.args, modelOf(paneId))
       }
-      await sendPrompt(paneId, text, attached)
+      await sendPrompt(paneId, text, attached, shared)
     } catch (e) {
       inputs.setDraft(paneId, text)
       if (attached.length) inputs.setPaneImages(paneId, () => attached)
+      for (const s of shared) inputs.addContext(paneId, s)
       inputs.setError(paneId, `Send failed: ${e}`)
     }
   }
@@ -308,16 +341,26 @@ export default function App() {
           onStop={() => sessionID && chat.abort(sessionID)}
           busy={busy}
           providers={providers}
-          model={model}
-          onModelChange={setModel}
+          model={modelOf(paneId)}
+          onModelChange={(m) => {
+            panes.setModel(paneId, m) // only this pane
+            setModel(m) // and the default for new chats
+          }}
           commands={commands.list}
           intelligent={intelligent}
           onToggleIntelligent={() => setIntelligent((v) => !v)}
           images={inputs.imagesOf(paneId)}
           onAddImages={(files) => void inputs.addImages(paneId, files, inputs.imagesOf(paneId).length)}
           onRemoveImage={(id) => inputs.setPaneImages(paneId, (list) => list.filter((img) => img.id !== id))}
-          thinking={thinking}
-          onThinkingChange={setThinking}
+          thinking={thinkingFor(modelOf(paneId))}
+          onThinkingChange={(v) => setThinkingFor(modelOf(paneId), v)}
+          contextOptions={topLevelThreads
+            .filter((t) => t.id !== sessionID)
+            .sort((a, b) => b.time.updated - a.time.updated)
+            .map((t) => ({ id: t.id, title: displayTitle(t.title), open: panes.panes.some((p) => p.sessionID === t.id) }))}
+          contexts={inputs.contextsOf(paneId).map((id) => ({ id, title: displayTitle(state.threads[id]?.title) }))}
+          onAddContext={(id) => id !== sessionID && inputs.addContext(paneId, id)}
+          onRemoveContext={(id) => inputs.removeContext(paneId, id)}
         />
         <ModStatusLine />
       </>

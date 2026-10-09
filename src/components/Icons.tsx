@@ -90,6 +90,9 @@ export const ComposeIcon = (p: IconProps) => (
   <Icon {...p}><path d="M12 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6" /><path d="M17.5 3.5a2.1 2.1 0 0 1 3 3L13 14l-4 1 1-4z" /></Icon>
 )
 
+export const LinkIcon = (p: IconProps) => (
+  <Icon {...p}><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" /><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" /></Icon>
+)
 export const SplitIcon = (p: IconProps) => (
   <Icon {...p}><rect x="3" y="4" width="18" height="16" rx="3" /><path d="M12 4v16" /></Icon>
 )

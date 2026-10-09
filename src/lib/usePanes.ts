@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { WindowState } from './opencode'
+import type { ModelRef, WindowState } from './opencode'
 
-export type Pane = { id: string; sessionID: string | null }
+// model: this pane's own model; null means the app-wide default
+export type Pane = { id: string; sessionID: string | null; model?: ModelRef | null }
 
 const PANES_KEY = 'radeon-harness.panes'
 const newId = () => Math.random().toString(36).slice(2, 10)
@@ -9,7 +10,8 @@ const newId = () => Math.random().toString(36).slice(2, 10)
 function readPanes(): Pane[] {
   try {
     const raw = JSON.parse(localStorage.getItem(PANES_KEY) ?? '[]') as Pane[]
-    if (Array.isArray(raw) && raw.length) return raw.map((p) => ({ id: newId(), sessionID: p.sessionID ?? null }))
+    if (Array.isArray(raw) && raw.length)
+      return raw.map((p) => ({ id: newId(), sessionID: p.sessionID ?? null, model: p.model ?? null }))
   } catch {
     // fall through to one empty pane
   }
@@ -43,7 +45,7 @@ export function usePanes() {
 
   useEffect(() => {
     try {
-      localStorage.setItem(PANES_KEY, JSON.stringify(panes.map((p) => ({ sessionID: p.sessionID }))))
+      localStorage.setItem(PANES_KEY, JSON.stringify(panes.map((p) => ({ sessionID: p.sessionID, model: p.model ?? null }))))
     } catch {
       // storage blocked: layout resets next launch
     }
@@ -77,13 +79,18 @@ export function usePanes() {
         if (sessionID) setSession(focused.id, sessionID)
         return false
       }
-      const pane = { id: newId(), sessionID }
+      // a new pane starts on the model of the pane it was split from
+      const pane = { id: newId(), sessionID, model: focused.model ?? null }
       setPanes((list) => [...list, pane])
       setFocusedId(pane.id)
       return true
     },
-    [panes, max, focused.id, setSession],
+    [panes, max, focused, setSession],
   )
+
+  const setModel = useCallback((paneId: string, model: ModelRef) => {
+    setPanes((list) => list.map((p) => (p.id === paneId ? { ...p, model } : p)))
+  }, [])
 
   const close = useCallback((paneId: string) => {
     setPanes((list) => (list.length <= 1 ? [{ ...list[0], sessionID: null }] : list.filter((p) => p.id !== paneId)))
@@ -94,5 +101,5 @@ export function usePanes() {
     setPanes((list) => list.map((p) => (p.sessionID === sessionID ? { ...p, sessionID: null } : p)))
   }, [])
 
-  return { panes, focused, max, setFocusedId, setSession, open, split, close, forget }
+  return { panes, focused, max, setFocusedId, setSession, setModel, open, split, close, forget }
 }
